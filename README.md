@@ -4,6 +4,7 @@
 
 当前技术底座采用 [modelbus/one-api-pro](https://github.com/modelbus/one-api-pro) 的 `b436998`（v0.0.25），并在其上持续开发；这不改变项目源自 songquanpeng/one-api 的血缘。
 
+- [协议入口与兼容范围](docs/protocols.md)
 - [参与贡献](CONTRIBUTING.md) · [安全问题报告](SECURITY.md)
 - [上游血缘记录](docs/UPSTREAM.md) · [当前技术基线](docs/BASELINE.md)
 - [第三方来源声明](THIRD_PARTY_NOTICES.md) · [原始 one-api README](README.upstream.md)

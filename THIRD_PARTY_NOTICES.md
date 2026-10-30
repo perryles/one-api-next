@@ -44,3 +44,7 @@
 - 各厂商官方定价页（OpenAI / Anthropic / Google / DeepSeek 等，抓取于 2026-10-31）
 - [models.dev](https://models.dev) 开放数据集（API JSON，抓取于 2026-10-31）
 - 用途：`relay/billing/ratio/model.go` 中 2025-2026 增补条目；数据本身为事实型价格信息，不构成代码版权
+
+## 2026-10-31 协议入口增量
+
+参考本地 `omnirelays/omnirelays-gateway/relay/controller/{messages,messages_writer,responses}.go` 及 Messages 转换测试，适配至本项目 `relay/handler/`。Messages 通过现有 Chat 转发链路进行边界转换；Responses 使用当前数据库定价、套餐和额度结算，不依赖 OmniRelays 的交易、控制面或 Reservation 模块。来源在本文件集中记录，不添加逐文件版本/作者头。
