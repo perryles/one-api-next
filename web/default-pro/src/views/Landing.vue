@@ -12,11 +12,11 @@
           <a href="#models">{{ $t('landing.navModels') }}</a>
           <a href="#download">{{ $t('landing.navDownload') }}</a>
           <a href="#faq">{{ $t('landing.navFaq') }}</a>
-          <a href="http://one-api.pro" target="_blank">{{ $t('landing.navDocs') }}</a>
+          <a href="https://github.com/perryles/one-api-next/tree/master/docs" target="_blank">{{ $t('landing.navDocs') }}</a>
         </div>
         <div class="nav-actions">
           <LangSwitcher size="small" width="110px" />
-          <a-button type="text" size="small" href="https://github.com/modelbus/one-api-pro" target="_blank" class="nav-github-btn">
+          <a-button type="text" size="small" href="https://github.com/perryles/one-api-next" target="_blank" class="nav-github-btn">
             <template #icon><icon-github /></template>
             GitHub
           </a-button>
@@ -42,7 +42,7 @@
       <div class="hero-inner">
         <div class="hero-text">
           <div class="hero-badge">
-            <a href="https://github.com/modelbus/one-api-pro" target="_blank" style="color:#165dff;text-decoration:none;">
+            <a href="https://github.com/perryles/one-api-next" target="_blank" style="color:#165dff;text-decoration:none;">
               <icon-github style="vertical-align:-2px" /> GitHub
             </a>
           </div>
@@ -58,11 +58,11 @@
               </a-button>
               <a-button size="large" shape="round" @click="scrollTo('features')">{{ $t('landing.viewFeatures') }}</a-button>
             </template>
-            <a-button size="large" shape="round" href="https://github.com/modelbus/one-api-pro" target="_blank" class="btn-gh-dark">
+            <a-button size="large" shape="round" href="https://github.com/perryles/one-api-next" target="_blank" class="btn-gh-dark">
               <template #icon><icon-github /></template>
               GitHub
             </a-button>
-            <a-button size="large" shape="round" href="https://github.com/modelbus/one-api-pro/releases" target="_blank">
+            <a-button size="large" shape="round" href="https://github.com/perryles/one-api-next/releases" target="_blank">
               {{ $t('landing.downloadNow') }} <icon-down />
             </a-button>
           </div>
@@ -143,7 +143,7 @@
     <section id="compare" class="section">
       <div class="section-header">
         <span class="section-label">{{ $t('landing.compareLabel') }}</span>
-        <h2><span class="cmp-old">one-api</span> <span class="cmp-vs">vs</span> <span class="cmp-new">one-api-pro</span></h2>
+        <h2><span class="cmp-old">one-api</span> <span class="cmp-vs">vs</span> <span class="cmp-new">one-api-next</span></h2>
         <p>{{ $t('landing.compareSubtitle') }}</p>
       </div>
       <div class="compare-container">
@@ -153,7 +153,7 @@
             <span class="col-badge old">{{ $t('landing.compareOldBadge') }}</span>
           </div>
           <div class="compare-col new-col">
-            <span class="col-badge new">one-api-pro</span>
+            <span class="col-badge new">one-api-next</span>
           </div>
         </div>
         <div class="compare-row" v-for="item in compareItems" :key="item.label">
@@ -192,19 +192,19 @@
         <p>{{ $t('landing.downloadSubtitle') }}</p>
       </div>
       <div class="download-grid">
-        <a href="https://github.com/modelbus/one-api-pro" target="_blank" class="download-card">
+        <a href="https://github.com/perryles/one-api-next" target="_blank" class="download-card">
           <icon-github style="font-size:36px;color:#1d2129" />
           <h3>GitHub Releases</h3>
           <p>{{ $t('landing.downloadGithubDesc') }}</p>
           <span class="dl-link">{{ $t('landing.downloadGo') }}</span>
         </a>
-        <a href="https://github.com/modelbus/one-api-pro" target="_blank" class="download-card">
+        <a href="https://github.com/perryles/one-api-next" target="_blank" class="download-card">
           <icon-code style="font-size:36px;color:#1d2129" />
           <h3>{{ $t('landing.downloadSourceTitle') }}</h3>
           <p>{{ $t('landing.downloadSourceDesc') }}</p>
           <span class="dl-link">{{ $t('landing.downloadDocs') }}</span>
         </a>
-        <a href="https://github.com/modelbus/one-api-pro#部署" target="_blank" class="download-card">
+        <a href="https://github.com/perryles/one-api-next#readme" target="_blank" class="download-card">
           <icon-cloud style="font-size:36px;color:#1d2129" />
           <h3>{{ $t('landing.downloadDockerTitle') }}</h3>
           <p>{{ $t('landing.downloadDockerDesc') }}</p>
@@ -234,18 +234,18 @@
         </div>
         <div class="footer-col">
           <h4>{{ $t('landing.footerResources') }}</h4>
-          <a href="https://github.com/modelbus/one-api-pro" target="_blank">GitHub</a>
-          <a href="https://github.com/modelbus/one-api-pro/releases" target="_blank">Releases</a>
+          <a href="https://github.com/perryles/one-api-next" target="_blank">GitHub</a>
+          <a href="https://github.com/perryles/one-api-next/releases" target="_blank">Releases</a>
         </div>
         <div class="footer-col">
           <h4>{{ $t('landing.footerDocs') }}</h4>
           <a href="#features">{{ $t('landing.footerAdvantages') }}</a>
           <a href="#compare">{{ $t('landing.footerCompare') }}</a>
-          <a href="http://one-api.pro" target="_blank">{{ $t('landing.footerOnlineDocs') }}</a>
+          <a href="https://github.com/perryles/one-api-next/tree/master/docs" target="_blank">{{ $t('landing.footerOnlineDocs') }}</a>
         </div>
       </div>
       <div class="footer-bottom">
-        &copy; {{ new Date().getFullYear() }} One Api Pro &nbsp;|&nbsp; <a href="https://github.com/modelbus/one-api-pro" target="_blank">GitHub</a> &nbsp;|&nbsp; MIT License
+        &copy; {{ new Date().getFullYear() }} one-api-next &nbsp;|&nbsp; <a href="https://github.com/perryles/one-api-next" target="_blank">GitHub</a> &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; <a href="https://github.com/modelbus/one-api-pro" target="_blank" rel="noopener noreferrer">{{ $t('landing.upstreamCredit') }}</a> &nbsp;|&nbsp; <a href="https://github.com/songquanpeng/one-api" target="_blank" rel="noopener noreferrer">{{ $t('landing.originalCredit') }}</a>
       </div>
     </footer>
   </div>
@@ -260,13 +260,13 @@ import { useStatusStore } from '@/stores/status'
 import { IconDashboard, IconApps, IconLock, IconCloud, IconThunderbolt, IconTool, IconCode, IconGithub, IconRight, IconDown, IconCheckCircleFill } from '@arco-design/web-vue/es/icon'
 import { PROVIDERS } from '@/constants/providers'
 import LangSwitcher from '@/components/LangSwitcher.vue'
-import logoPng from '@/assets/logo.png'
+import logoPng from '@/assets/logo.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const statusStore = useStatusStore()
 const { t } = useI18n()
-const systemName = computed(() => statusStore.status?.system_name || 'One Api Pro')
+const systemName = computed(() => statusStore.status?.system_name || 'one-api-next')
 
 const logoFallback = computed(() => statusStore.status?.logo || '')
 const logoSrc = ref(logoPng)

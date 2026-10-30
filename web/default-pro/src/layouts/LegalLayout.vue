@@ -3,7 +3,7 @@
     <header class="legal-header">
       <div class="legal-header-inner">
         <router-link to="/" class="legal-brand">
-          <img :src="logoPng" alt="ONE-API-PRO" />
+          <img :src="logoPng" alt="one-api-next" />
         </router-link>
         <router-link to="/" class="legal-back">{{ $t('legal.backHome') }}</router-link>
       </div>
@@ -25,7 +25,7 @@
 </template>
 
 <script setup>
-import logoPng from '@/assets/logo.png'
+import logoPng from '@/assets/logo.svg'
 
 defineProps({
   title: { type: String, required: true },

@@ -12,7 +12,7 @@ export const useStatusStore = defineStore('status', () => {
       if (data.success) {
         status.value = data.data
         loaded.value = true
-        document.title = data.data.system_name || 'One Api Pro'
+        document.title = data.data.system_name || 'one-api-next'
       }
     } catch (e) {
       // ignore

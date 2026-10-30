@@ -159,7 +159,7 @@ import { useStatusStore } from '@/stores/status'
 import { IconDashboard, IconMessage, IconApps, IconCode, IconGift, IconArchive, IconUserGroup, IconCalendar, IconFile, IconSettings, IconExport, IconUser, IconDown, IconStorage, IconBarChart } from '@arco-design/web-vue/es/icon'
 import LangSwitcher from '@/components/LangSwitcher.vue'
 import api from '@/api'
-import logoPng from '@/assets/logo.png'
+import logoPng from '@/assets/logo.svg'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -170,7 +170,7 @@ const statusStore = useStatusStore()
 const collapsed = ref(false)
 const selectedKeys = ref([route.path])
 
-const systemName = computed(() => statusStore.status?.system_name || 'One Api Pro')
+const systemName = computed(() => statusStore.status?.system_name || 'one-api-next')
 const chatLink = computed(() => statusStore.status?.chat_link || '')
 const currentTitle = computed(() => (route.meta?.title ? t(route.meta.title) : ''))
 

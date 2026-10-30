@@ -8,7 +8,7 @@
     <div class="auth-container">
       <div class="auth-card">
         <div class="auth-brand">
-          <img :src="logoPng" class="brand-logo" alt="ONE-API-PRO" />
+          <img :src="logoPng" class="brand-logo" alt="one-api-next" />
         </div>
         <slot />
       </div>
@@ -19,7 +19,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useStatusStore } from '@/stores/status'
-import logoPng from '@/assets/logo.png'
+import logoPng from '@/assets/logo.svg'
 
 const statusStore = useStatusStore()
 

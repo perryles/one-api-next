@@ -117,7 +117,7 @@ router.beforeEach((to, from, next) => {
   next()
 })
 
-const BASE_TITLE = 'ONE-API-PRO'
+const BASE_TITLE = 'one-api-next'
 
 router.afterEach((to) => {
   if (to.meta && to.meta.title) {

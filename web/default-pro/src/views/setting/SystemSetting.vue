@@ -106,7 +106,7 @@
       <h3>{{ $t('settingPage.system.appearance') }}</h3>
       <a-form :model="form" layout="vertical" class="setting-form">
         <a-row :gutter="[16, 0]">
-          <a-col :span="7"><a-form-item :label="$t('settingPage.system.systemName')"><a-input v-model="form.SystemName" placeholder="One Api Pro" size="large" /></a-form-item></a-col>
+          <a-col :span="7"><a-form-item :label="$t('settingPage.system.systemName')"><a-input v-model="form.SystemName" placeholder="one-api-next" size="large" /></a-form-item></a-col>
           <a-col :span="7"><a-form-item label="Logo URL"><a-input v-model="form.Logo" :placeholder="$t('settingPage.system.logoPlaceholder')" size="large" /></a-form-item></a-col>
           <a-col :span="4"><a-form-item :label="$t('settingPage.system.theme')"><a-input v-model="form.Theme" placeholder="default" size="large" /></a-form-item></a-col>
         </a-row>
