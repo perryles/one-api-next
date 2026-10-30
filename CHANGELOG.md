@@ -11,8 +11,17 @@
 - 新增 [SECURITY.md](./SECURITY.md)：私密漏洞报告通道（GitHub Security Advisories 优先）、72h/7d/14d 响应时间线、网关类项目专属漏洞范围（鉴权/计费绕过/SSRF/SQLi/XSS/密钥泄露）、负责任披露与致谢。
 - Issue 模板 `config.yml` 增加「安全漏洞报告」引导链接，防止漏洞经公开 Issue 泄露。
 
+### 路由与韧性子系统（移植自 one-api-pro，默认关闭，零行为变化）
+- 新增 `channelrouter/` 渠道路由引擎：失败冷却、并发上限、RPM 限流、粘性会话、权重选择。
+- 新增 `relay/interceptor/` + `relay/errcode/` 错误拦截链：按状态码决定 passthrough / 重试 / 自动禁用 / 冷却，取代旧的裸重试循环。
+- 重写 `controller/relay.go` 重试主流程：兜底渠道（`is_fallback`）失败保底、请求模型自动改写、渠道最近错误落库（`last_error`）。
+- `middleware/distributor.go`：指定渠道（specific channel id）增加分组与模型权限校验。
+- 新增渠道字段：`max_concurrency`、`rpm`、`cooldown_seconds`、`is_fallback`、`fallback_priority`、`last_error`、`last_error_time`（启动时自动迁移）。
+- 新增环境变量：`CHANNEL_STICKY_SESSION_ENABLED`、`CHANNEL_CONCURRENCY_ENABLED`、`CHANNEL_DEFAULT_COOLDOWN_SECONDS`、`CHANNEL_MAX_COOLDOWN_SECONDS`（默认全关，行为与上游一致）。
+- 适配：剔除 one-api-pro 的 cluster 多节点依赖（并发/RPM 为单机内存态）；多节点列为后续批次。
+
 ### 计费 / 价格表（核心更新）
-- `ModelRatio` / `CompletionRatio` 全量刷新至 2026-10 官方牌价（数据源：厂商定价页 + models.dev），新增覆盖（摘选）：
+- `ModelRatio` / `CompletionRatio` 全量刷新至 2026-10 官方牌价（数据源：厂商定价页 + models.dev），条目从 ~590 增至 **928 / 603**，新增覆盖（摘选）：
   - **OpenAI**：gpt-4.1 / 4.1-mini / 4.1-nano、o3 / o3-pro / o4-mini、gpt-5 / 5-mini / 5-nano / 5-pro / 5.1 / 5.2 / 5.2-pro / 5.3-codex / 5.4 系 / 5.5 系 / 5.6 系、gpt-6 系（astra / luna / sol / terra）
   - **Anthropic**：claude-3.7-sonnet、claude-3-5-haiku 新价、claude-4 / 4.5（sonnet / opus / haiku）、claude-5 / 5.5 系
   - **Google Gemini**：2.0-flash / flash-lite、2.5 pro / flash / flash-lite、3.x（pro / flash / flash-lite）、gemini-4-argon
@@ -29,9 +38,14 @@
 
 ### 缺陷修复
 - 修复：`CompletionRatio` 默认表对存量数据库不做增量合并的问题（上游仅合并 `ModelRatio`），存量实例升级后新模型的输出倍率可正常生效。
+- 修复：未配置倍率的模型静默按兜底倍率 30 计费（最高可比真实价格高约 1200 倍）—— 现默认拒绝计费并返回 400（`REJECT_UNKNOWN_MODEL_RATIO=false` 可恢复旧行为）。
+- 修复：`middleware/recover.go` 非常量格式串（go 1.24+ vet 阻断测试）。
+- 新增：上下文分档计价 `ContextPriceTiers`（运营设置 JSON，默认关闭；机制移植自 omnirelays）。
 
 ### 依赖
 - Go / gin / gorm / x-crypto 等依赖升级（详见 go.mod 变更与 docs/UPSTREAM.md 对账表）。
 
-### 计划中（本版本目标）
-- 前端三主题（default / berry / air）依赖刷新与构建验证。
+### 计划中（后续批次）
+- 前端三主题（default / berry / air）依赖刷新与构建验证；渠道新字段（并发/RPM/冷却/兜底）编辑表单。
+- one-api-pro 未并入部分：DB 级模型价格表、套餐/订阅/订单/支付、多节点集群、Vue3 控制台。
+- omnirelays 未并入部分：Reservation 预扣额度事务、渠道级价格落表。

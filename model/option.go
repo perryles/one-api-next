@@ -70,6 +70,7 @@ func InitOptionMap() {
 	config.OptionMap["ModelRatio"] = billingratio.ModelRatio2JSONString()
 	config.OptionMap["GroupRatio"] = billingratio.GroupRatio2JSONString()
 	config.OptionMap["CompletionRatio"] = billingratio.CompletionRatio2JSONString()
+	config.OptionMap["ContextPriceTiers"] = billingratio.ContextPriceTiersJSON()
 	config.OptionMap["TopUpLink"] = config.TopUpLink
 	config.OptionMap["ChatLink"] = config.ChatLink
 	config.OptionMap["QuotaPerUnit"] = strconv.FormatFloat(config.QuotaPerUnit, 'f', -1, 64)
@@ -84,6 +85,11 @@ func loadOptionsFromDatabase() {
 	for _, option := range options {
 		if option.Key == "ModelRatio" {
 			option.Value = billingratio.AddNewMissingRatio(option.Value)
+		}
+		// one-api-next 修复：输出倍率与输入倍率一样，对存量库做增量合并，
+		// 否则新版本的 CompletionRatio 默认值永远无法下发到已有数据库。
+		if option.Key == "CompletionRatio" {
+			option.Value = billingratio.AddNewMissingCompletionRatio(option.Value)
 		}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
@@ -229,6 +235,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = billingratio.UpdateGroupRatioByJSONString(value)
 	case "CompletionRatio":
 		err = billingratio.UpdateCompletionRatioByJSONString(value)
+	case "ContextPriceTiers":
+		err = billingratio.UpdateContextPriceTiers(value)
 	case "TopUpLink":
 		config.TopUpLink = value
 	case "ChatLink":

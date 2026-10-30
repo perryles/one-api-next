@@ -39,13 +39,24 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	meta.ActualModelName = textRequest.Model
 	// set system prompt if not empty
 	systemPromptReset := setSystemPrompt(ctx, textRequest, meta.ForcedSystemPrompt)
-	// get model ratio & group ratio
-	modelRatio := billingratio.GetModelRatio(textRequest.Model, meta.ChannelType)
+	// get prompt tokens first, then resolve billing rates
+	// one-api-next: 支持上下文分档计价（按输入长度选档）与未配置倍率拒绝
+	promptTokens := getPromptTokens(textRequest, meta.Mode)
+	meta.PromptTokens = promptTokens
+	modelRatio, bizErr := requireModelRatio(textRequest.Model, meta.ChannelType)
+	if bizErr != nil {
+		return bizErr
+	}
+	completionRatioOverride := -1.0
+	if tiers := billingratio.GetContextPriceTiers(textRequest.Model, meta.ChannelType); len(tiers) > 0 {
+		if tier, ok := billingratio.SelectContextPriceTier(tiers, promptTokens); ok {
+			modelRatio = tier.PromptRatio
+			completionRatioOverride = tier.CompletionRatio
+		}
+	}
 	groupRatio := billingratio.GetGroupRatio(meta.Group)
 	ratio := modelRatio * groupRatio
 	// pre-consume quota
-	promptTokens := getPromptTokens(textRequest, meta.Mode)
-	meta.PromptTokens = promptTokens
 	preConsumedQuota, bizErr := preConsumeQuota(ctx, textRequest, promptTokens, ratio, meta)
 	if bizErr != nil {
 		logger.Warnf(ctx, "preConsumeQuota failed: %+v", *bizErr)
@@ -83,7 +94,7 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 		return respErr
 	}
 	// post-consume quota
-	go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+	go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset, completionRatioOverride)
 	return nil
 }
 

@@ -33,8 +33,9 @@ _✨ 基于 [songquanpeng/one-api](https://github.com/songquanpeng/one-api) 向�
 | 1 | **模型价格表大更新** | 进行中 | 上游价格停留在 2025-02（最高只到 `o3-mini` / `claude-3-5`）。补齐 2025–2026 全系：OpenAI GPT-4.1 / GPT-5.x / GPT-6 系列、o3 / o3-pro / o4-mini；Anthropic Claude 3.7 / 4 / 4.5 / 5.x；Google Gemini 2.5 / 3.x / 4；DeepSeek V3.x / V4（flash / pro，含峰谷价说明）；Qwen3–3.8、GLM-4.5–5.3、Kimi K2–K3、MiniMax M2–M3.1、豆包 Seed、StepFun、SiliconFlow、Mistral / Cohere / Perplexity 等 |
 | 2 | **CompletionRatio 合并缺陷修复** | 进行中 | 上游仅对 `ModelRatio` 做存量库增量合并（`AddNewMissingRatio`），`CompletionRatio` 更新永远无法下发到已有数据库 —— 本项目补齐 |
 | 3 | **依赖与安全升级** | 进行中 | Go 工具链、gin / gorm / `golang.org/x/crypto` 等依赖升级，消化上游滞后的 CVE |
-| 4 | **前端构建链刷新** | 计划中 | 三主题（default / berry / air）依赖升级与可构建性验证 |
-| 5 | **版本管理规范化** | 已完成 | 上游 `VERSION` 为空文件；本项目引入 `v0.6.x-next.N` 版本号（延续上游 v0.6 系列） |
+| 4 | **路由与韧性子系统** | 已完成 | 整包移植 one-api-pro：channelrouter（失败冷却/并发上限/RPM/粘性会话）、错误拦截链、兜底渠道、指定渠道权限校验（默认关闭，`CHANNEL_*` 环境变量开启） |
+| 5 | **前端构建链刷新** | 计划中 | 三主题（default / berry / air）依赖升级与可构建性验证；渠道新字段编辑表单 |
+| 6 | **版本管理规范化** | 已完成 | 上游 `VERSION` 为空文件；本项目引入 `v0.6.x-next.N` 版本号（延续上游 v0.6 系列） |
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)；与上游的精确对账表见 [docs/UPSTREAM.md](./docs/UPSTREAM.md)。
 

@@ -28,10 +28,13 @@
 | 日期 | 类型 | 范围 | 说明 |
 |---|---|---|---|
 | 2026-10-31 | docs | `README.md`、`README.upstream.md`、`VERSION`、`docs/UPSTREAM.md`、`CHANGELOG.md` | 建立项目定位：声明基于 songquanpeng/one-api 向后迭代；原 README 归档为 README.upstream.md；引入版本号 v0.6.11-next.0 |
-| 2026-10-31 | feat/billing | `relay/billing/ratio/model.go` | 模型价格表（ModelRatio / CompletionRatio）全量更新至 2026-10 官方牌价，覆盖 2025-2026 新模型（详见 CHANGELOG） |
+| 2026-10-31 | feat/billing | `relay/billing/ratio/model.go` | 模型价格表（ModelRatio / CompletionRatio）全量更新至 2026-10 官方牌价，覆盖 2025-2026 新模型（详见 CHANGELOG）；openrouter 旧快照整体替换 |
 | 2026-10-31 | fix | `model/option.go`、`relay/billing/ratio/model.go` | CompletionRatio 支持存量库增量合并（对齐上游仅有的 ModelRatio 合并逻辑） |
-| 2026-10-31 | chore | `go.mod` / `go.sum` | Go 依赖与安全升级 |
-| 2026-10-31 | docs | `CONTRIBUTING.md`、`SECURITY.md`、`.github/ISSUE_TEMPLATE/config.yml`、`README.md` | 新增贡献指南（含价格表维护 SOP、渠道适配流程）与安全报告政策（私密通道、响应时间线、漏洞范围）；issue 模板增加安全引导 |
+| 2026-10-31 | feat/billing | `relay/billing/ratio/context_tiers.go`、`relay/controller/{text,helper}.go`、`model/option.go` | 上下文分档计价（机制移植自 omnirelays，默认关闭，运营设置 `ContextPriceTiers` JSON） |
+| 2026-10-31 | feat/billing | `relay/billing/ratio/model.go`、`relay/controller/{text,audio,image,helper}.go`、`common/config/config.go` | 未知倍率模型拒绝计费（`GetModelRatioWithKnown`，`REJECT_UNKNOWN_MODEL_RATIO` 默认 true，机制移植自 omnirelays） |
+| 2026-10-31 | chore | `go.mod` / `go.sum`、`.github/workflows/*` | Go 依赖全量升级（gorm 1.31、gin 1.10.x、x/crypto 等），go 指令升至 1.26，CI 同步；修复 go1.24+ vet 的非常量格式串问题 |
+| 2026-10-31 | feat/router | `channelrouter/`、`relay/interceptor/`、`relay/errcode/`、`controller/relay.go`、`middleware/distributor.go`、`model/{channel,cache}.go`、`common/{config,ctxkey}` | 整包移植 one-api-pro 路由与韧性子系统：粘性会话/失败冷却/并发上限/RPM/错误拦截链/兜底渠道/指定渠道权限校验（剔除 cluster 多节点，见 THIRD_PARTY_NOTICES.md） |
+| 2026-10-31 | docs | `CONTRIBUTING.md`、`SECURITY.md`、`.github/ISSUE_TEMPLATE/config.yml`、`README.md`、`THIRD_PARTY_NOTICES.md` | 贡献指南（含价格表维护 SOP）、安全报告政策、第三方来源声明（含 one-api-pro 无 LICENSE 文件的许可留痕） |
 
 （后续每批修改持续追加于上表与 CHANGELOG.md）
 

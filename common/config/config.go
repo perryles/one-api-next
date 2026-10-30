@@ -164,3 +164,29 @@ var UserContentRequestTimeout = env.Int("USER_CONTENT_REQUEST_TIMEOUT", 30)
 
 var EnforceIncludeUsage = env.Bool("ENFORCE_INCLUDE_USAGE", false)
 var TestPrompt = env.String("TEST_PROMPT", "Output only your specific model name with no additional text.")
+
+// RejectUnknownModelRatio 控制未配置倍率的模型如何处理（机制移植自 omnirelays）：
+// true（默认）= 拒绝计费并返回 400，避免静默按兜底倍率 30 错误扣费；
+// false = 恢复上游历史行为（按 30 计费并记日志）。
+var RejectUnknownModelRatio = env.Bool("REJECT_UNKNOWN_MODEL_RATIO", true)
+
+// ==== channelrouter（移植自 one-api-pro，见 docs/UPSTREAM.md）====
+var ChannelDefaultCooldownSeconds = env.Int("CHANNEL_DEFAULT_COOLDOWN_SECONDS", 60)
+var ChannelMaxCooldownSeconds = env.Int("CHANNEL_MAX_COOLDOWN_SECONDS", 600)
+var ChannelConcurrencyEnabled = env.Bool("CHANNEL_CONCURRENCY_ENABLED", false)
+var ChannelStickySessionEnabled = env.Bool("CHANNEL_STICKY_SESSION_ENABLED", false)
+
+// ErrorNext 控制错误拦截链各动作开关（移植自 one-api-pro）。
+var ErrorNext = ErrorNextConfig{
+	Passthrough: true,
+	Retry:       true,
+	Disable:     true,
+	Cooldown:    true,
+}
+
+type ErrorNextConfig struct {
+	Passthrough bool `json:"passthrough"`
+	Retry       bool `json:"retry"`
+	Disable     bool `json:"disable"`
+	Cooldown    bool `json:"cooldown"`
+}

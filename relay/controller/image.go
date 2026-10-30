@@ -168,7 +168,11 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		requestBody = bytes.NewBuffer(jsonStr)
 	}
 
-	modelRatio := billingratio.GetModelRatio(imageModel, meta.ChannelType)
+	// one-api-next: 未配置倍率的模型拒绝计费（可经 REJECT_UNKNOWN_MODEL_RATIO 关闭）
+	modelRatio, ratioErr := requireModelRatio(imageModel, meta.ChannelType)
+	if ratioErr != nil {
+		return ratioErr
+	}
 	groupRatio := billingratio.GetGroupRatio(meta.Group)
 	ratio := modelRatio * groupRatio
 	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)

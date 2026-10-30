@@ -26,6 +26,38 @@ import (
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
+// requireModelRatio 取得模型倍率；模型未在倍率表中配置且开启拒绝开关时拒绝服务。
+// （机制移植自 omnirelays，见 docs/UPSTREAM.md）
+//
+// 历史行为是回退到 30（≈$0.06/1K input），而真实价格可能低到 $0.0005/1K，
+// 静默按 30 计费最高可比真实价格高约 1200 倍。宁可明确拒绝，并把修复动作
+// 写进错误信息。设置环境变量 REJECT_UNKNOWN_MODEL_RATIO=false 可恢复旧行为。
+func requireModelRatio(name string, channelType int) (float64, *relaymodel.ErrorWithStatusCode) {
+	ratio, known := billingratio.GetModelRatioWithKnown(name, channelType)
+	if !known && config.RejectUnknownModelRatio {
+		return 0, openai.ErrorWrapper(
+			fmt.Errorf("模型 %s 未配置计费倍率，已拒绝计费以避免错误扣费；请管理员在「系统设置 → 模型倍率」中补充后重试，或设置 REJECT_UNKNOWN_MODEL_RATIO=false 恢复旧版兜底", name),
+			"model_ratio_not_configured", http.StatusBadRequest)
+	}
+	return ratio, nil
+}
+
+// resolveTextBillingRates 解析一次文本调用的计费倍率，支持上下文分档计价
+// （one-api-next，机制移植自 omnirelays）：
+// 若模型配置了 ContextPriceTiers，按预估输入 tokens 选档，档位的
+// PromptRatio/CompletionRatio 整体替换基础倍率；分档快照随请求携带到结算，
+// 不受上游返回的真实 usage 影响。返回 completionRatioOverride < 0 表示未分档。
+func resolveTextBillingRates(modelName string, channelType int, promptTokens int) (modelRatio float64, completionRatioOverride float64) {
+	modelRatio, _ = billingratio.GetModelRatioWithKnown(modelName, channelType)
+	completionRatioOverride = -1
+	if tiers := billingratio.GetContextPriceTiers(modelName, channelType); len(tiers) > 0 {
+		if tier, ok := billingratio.SelectContextPriceTier(tiers, promptTokens); ok {
+			return tier.PromptRatio, tier.CompletionRatio
+		}
+	}
+	return modelRatio, completionRatioOverride
+}
+
 func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.GeneralOpenAIRequest, error) {
 	textRequest := &relaymodel.GeneralOpenAIRequest{}
 	err := common.UnmarshalBodyReusable(c, textRequest)
@@ -94,13 +126,17 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 	return preConsumedQuota, nil
 }
 
-func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, ratio float64, preConsumedQuota int64, modelRatio float64, groupRatio float64, systemPromptReset bool) {
+func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, ratio float64, preConsumedQuota int64, modelRatio float64, groupRatio float64, systemPromptReset bool, completionRatioOverride ...float64) {
 	if usage == nil {
 		logger.Error(ctx, "usage is nil, which is unexpected")
 		return
 	}
 	var quota int64
 	completionRatio := billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType)
+	// one-api-next: 上下文分档计价时使用请求开始时选定的档位输出倍率快照
+	if len(completionRatioOverride) > 0 && completionRatioOverride[0] >= 0 {
+		completionRatio = completionRatioOverride[0]
+	}
 	promptTokens := usage.PromptTokens
 	completionTokens := usage.CompletionTokens
 	quota = int64(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))

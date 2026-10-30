@@ -54,7 +54,11 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
-	modelRatio := billingratio.GetModelRatio(audioModel, channelType)
+	// one-api-next: 未配置倍率的模型拒绝计费（可经 REJECT_UNKNOWN_MODEL_RATIO 关闭）
+	modelRatio, ratioErr := requireModelRatio(audioModel, channelType)
+	if ratioErr != nil {
+		return ratioErr
+	}
 	groupRatio := billingratio.GetGroupRatio(group)
 	ratio := modelRatio * groupRatio
 	var quota int64
