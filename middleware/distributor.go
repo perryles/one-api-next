@@ -114,6 +114,19 @@ func selectChannelViaRouter(c *gin.Context, group, modelName string, userId int,
 	}
 
 	candidates := model.GetChannelCandidates(group, modelName)
+	if c.Request.URL.Path == "/v1/responses" {
+		compatible := make([]*model.Channel, 0, len(candidates))
+		for _, channel := range candidates {
+			if registry.SupportsResponses(registry.IDByLegacyType(channel.Type)) {
+				compatible = append(compatible, channel)
+			}
+		}
+		candidates = compatible
+		if len(candidates) == 0 {
+			return nil, fmt.Errorf("no Responses-compatible channel for model %s", modelName)
+		}
+	}
+
 	if len(candidates) == 0 {
 		return model.CacheGetRandomSatisfiedChannel(group, modelName, ignoreFirstPriority)
 	}
@@ -128,6 +141,9 @@ func selectChannelViaRouter(c *gin.Context, group, modelName string, userId int,
 
 	ch, err := channelrouter.DefaultRouter.Route(c.Request.Context(), req, candidates)
 	if err != nil {
+		if c.Request.URL.Path == "/v1/responses" {
+			return nil, err
+		}
 		return model.CacheGetRandomSatisfiedChannel(group, modelName, ignoreFirstPriority)
 	}
 	return ch, nil

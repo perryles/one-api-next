@@ -120,3 +120,9 @@ func IDByLegacyType(typ int) string {
 	}
 	return ""
 }
+
+// SupportsResponses identifies channels configured for native Responses passthrough.
+// The upstream service must itself implement /v1/responses.
+func SupportsResponses(id string) bool {
+	return id == "openai" || id == "openai_compatible" || id == "custom"
+}

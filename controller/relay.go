@@ -20,6 +20,7 @@ import (
 	"github.com/perryles/one-api-next/monitor"
 	"github.com/perryles/one-api-next/relay/handler"
 	"github.com/perryles/one-api-next/relay/interceptor"
+	"github.com/perryles/one-api-next/relay/registry"
 	"github.com/perryles/one-api-next/relay/relaymode"
 	"github.com/perryles/one-api-next/relay/schema"
 )
@@ -40,6 +41,10 @@ func initErrorInterceptorChain() {
 func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 	var err *model.ErrorWithStatusCode
 	switch relayMode {
+	case relaymode.Responses:
+		err = controller.RelayResponsesHelper(c)
+	case relaymode.Messages:
+		err = controller.RelayMessagesHelper(c)
 	case relaymode.ImagesGenerations:
 		err = controller.RelayImageHelper(c, relayMode)
 	case relaymode.AudioSpeech:
@@ -81,6 +86,9 @@ func Relay(c *gin.Context) {
 		return
 	}
 
+	if c.Writer.Written() {
+		return
+	}
 	lastFailedChannelId := channelId
 	channelName := c.GetString(ctxkey.ChannelName)
 	group := c.GetString(ctxkey.Group)
@@ -130,6 +138,9 @@ func Relay(c *gin.Context) {
 			channelrouter.DefaultRouter.ReleaseConcurrency(ch.Id)
 		}
 
+		if c.Writer.Written() {
+			return
+		}
 		lastFailedChannelId = ch.Id
 		channelName = ch.Name
 
@@ -158,6 +169,10 @@ func Relay(c *gin.Context) {
 	}
 
 	if processedErr != nil {
+		if relayMode == relaymode.Messages {
+			c.JSON(processedErr.StatusCode, gin.H{"type": "error", "error": gin.H{"type": "api_error", "message": processedErr.Error.Message}})
+			return
+		}
 		processedErr.Error.Message = helper.MessageWithRequestId(processedErr.Error.Message, requestId)
 		c.JSON(processedErr.StatusCode, gin.H{
 			"error": processedErr.Error,
@@ -171,6 +186,19 @@ func routeChannel(c *gin.Context, group, modelName string, userId int, ignoreFir
 	}
 
 	candidates := dbmodel.GetChannelCandidates(group, modelName)
+	if c.Request.URL.Path == "/v1/responses" {
+		compatible := make([]*dbmodel.Channel, 0, len(candidates))
+		for _, channel := range candidates {
+			if registry.SupportsResponses(registry.IDByLegacyType(channel.Type)) {
+				compatible = append(compatible, channel)
+			}
+		}
+		candidates = compatible
+		if len(candidates) == 0 {
+			return nil, fmt.Errorf("no Responses-compatible channel for model %s", modelName)
+		}
+	}
+
 	if len(candidates) == 0 {
 		return dbmodel.CacheGetRandomSatisfiedChannel(group, modelName, ignoreFirstPriority)
 	}
@@ -190,6 +218,9 @@ func routeChannel(c *gin.Context, group, modelName string, userId int, ignoreFir
 
 	ch, err := channelrouter.DefaultRouter.Route(c.Request.Context(), req, candidates)
 	if err != nil {
+		if c.Request.URL.Path == "/v1/responses" {
+			return nil, err
+		}
 		return dbmodel.CacheGetRandomSatisfiedChannel(group, modelName, ignoreFirstPriority)
 	}
 	return ch, nil
@@ -343,3 +374,4 @@ func RelayNotFound(c *gin.Context) {
 		"error": err,
 	})
 }
+func RelayMessagesCountTokens(c *gin.Context) { controller.RelayMessagesCountTokens(c) }

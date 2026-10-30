@@ -10,6 +10,20 @@ import (
 )
 
 func abortWithMessage(c *gin.Context, statusCode int, message string) {
+	if c.Request.URL.Path == "/v1/messages" || c.Request.URL.Path == "/v1/messages/count_tokens" {
+		kind := "invalid_request_error"
+		if statusCode == 401 {
+			kind = "authentication_error"
+		} else if statusCode == 403 {
+			kind = "permission_error"
+		} else if statusCode == 429 {
+			kind = "rate_limit_error"
+		} else if statusCode >= 500 {
+			kind = "api_error"
+		}
+		c.AbortWithStatusJSON(statusCode, gin.H{"type": "error", "error": gin.H{"type": kind, "message": message}})
+		return
+	}
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"message": helper.MessageWithRequestId(message, c.GetString(helper.RequestIdKey)),
