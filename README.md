@@ -1,3 +1,17 @@
+# one-api-next
+
+**one-api-next 是基于 [songquanpeng/one-api](https://github.com/songquanpeng/one-api) 向后迭代的项目。** 感谢原作者 songquanpeng（JustSong）和所有上游贡献者。本项目保留原始 MIT 版权声明及来源记录。
+
+当前技术底座采用 [modelbus/one-api-pro](https://github.com/modelbus/one-api-pro) 的 `b436998`（v0.0.25），并在其上持续开发；这不改变项目源自 songquanpeng/one-api 的血缘。
+
+- [参与贡献](CONTRIBUTING.md) · [安全问题报告](SECURITY.md)
+- [上游血缘记录](docs/UPSTREAM.md) · [当前技术基线](docs/BASELINE.md)
+- [第三方来源声明](THIRD_PARTY_NOTICES.md) · [原始 one-api README](README.upstream.md)
+
+下方保留技术底座的使用文档；其中上游演示站、发布地址及历史版本记录属于 one-api-pro，不代表本项目运营的服务。
+
+---
+
 <p align="center">
   <img src="docs/logo.png" width="150" height="150" alt="one-api-pro logo">
 </p>
@@ -321,7 +335,7 @@ You can further customize it through environment variables or command-line argum
 20. `SQLITE_BUSY_TIMEOUT` — SQLite lock-wait timeout in milliseconds. Default `3000`.
 21. `GEMINI_SAFETY_SETTING` — Gemini safety setting. Default `BLOCK_NONE`.
 22. `GEMINI_VERSION` — Gemini API version used by One Api Pro. Default `v1`.
-23. `THEME` — admin theme. Default `default-pro` (Vue 3). Other options: `default` / `berry` / `air` (legacy React themes). See [web/README.md](web/README.md).
+23. `THEME` — admin theme. Default `default-pro` (Vue 3). Other options: `default` / `berry` / `air` (legacy React themes). See [web/README.md](web/default-pro/).
 24. `ENABLE_METRIC` — auto-disable channels with low success rate. Default `false`.
 25. `METRIC_QUEUE_SIZE` — sliding window size for success-rate statistics. Default `10`.
 26. `METRIC_SUCCESS_RATE_THRESHOLD` — success-rate threshold. Default `0.8`.

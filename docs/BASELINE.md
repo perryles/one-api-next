@@ -1,5 +1,7 @@
 # one-api-next 开发基线
 
+one-api-next 是基于 [songquanpeng/one-api](https://github.com/songquanpeng/one-api) 向后迭代的项目；采用 one-api-pro 作为当前技术底座，不改变原始来源、版权和贡献记录。
+
 本项目从 2026-10-31 起以 https://github.com/modelbus/one-api-pro 为完整代码底座。
 
 - 上游分支：master
