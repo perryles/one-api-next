@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
 
+	"github.com/songquanpeng/one-api/channelrouter"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/client"
 	"github.com/songquanpeng/one-api/common/config"
@@ -93,6 +94,9 @@ func main() {
 	}
 	openai.InitTokenEncoders()
 	client.Init()
+
+	// one-api-pro 移植：渠道路由器（粘性会话/冷却/并发/RPM，默认关闭）
+	channelrouter.InitRouter()
 
 	// Initialize i18n
 	if err := i18n.Init(); err != nil {

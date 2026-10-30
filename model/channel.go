@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/helper"
@@ -38,6 +39,14 @@ type Channel struct {
 	Priority           *int64  `json:"priority" gorm:"bigint;default:0"`
 	Config             string  `json:"config"`
 	SystemPrompt       *string `json:"system_prompt" gorm:"type:text"`
+	// ==== channelrouter 字段（移植自 one-api-pro，默认关闭，见 docs/UPSTREAM.md）====
+	MaxConcurrency   *int   `json:"max_concurrency" gorm:"default:0"`
+	RPM              *int   `json:"rpm" gorm:"default:0"`
+	CooldownSeconds  int    `json:"cooldown_seconds" gorm:"default:60"`
+	IsFallback       *bool  `json:"is_fallback" gorm:"default:0"`
+	FallbackPriority *int64 `json:"fallback_priority" gorm:"bigint;default:0"`
+	LastError        string `json:"last_error" gorm:"type:text"`
+	LastErrorTime    int64  `json:"last_error_time" gorm:"bigint;default:0"`
 }
 
 type ChannelConfig struct {
@@ -102,6 +111,60 @@ func (channel *Channel) GetPriority() int64 {
 		return 0
 	}
 	return *channel.Priority
+}
+
+// ==== channelrouter 访问器（移植自 one-api-pro）====
+
+func (channel *Channel) GetMaxConcurrency() int {
+	if channel.MaxConcurrency == nil {
+		return 0
+	}
+	return *channel.MaxConcurrency
+}
+
+func (channel *Channel) GetRPM() int {
+	if channel.RPM == nil {
+		return 0
+	}
+	return *channel.RPM
+}
+
+func (channel *Channel) GetIsFallback() bool {
+	if channel.IsFallback == nil {
+		return false
+	}
+	return *channel.IsFallback
+}
+
+func (channel *Channel) GetFallbackPriority() int64 {
+	if channel.FallbackPriority == nil {
+		return 0
+	}
+	return *channel.FallbackPriority
+}
+
+func (channel *Channel) ContainsGroup(group string) bool {
+	if group == "" {
+		return true
+	}
+	for _, g := range strings.Split(channel.Group, ",") {
+		if strings.TrimSpace(g) == group {
+			return true
+		}
+	}
+	return false
+}
+
+func (channel *Channel) ContainsModel(modelName string) bool {
+	if modelName == "" {
+		return true
+	}
+	for _, m := range strings.Split(channel.Models, ",") {
+		if strings.TrimSpace(m) == modelName {
+			return true
+		}
+	}
+	return false
 }
 
 func (channel *Channel) GetBaseURL() string {
@@ -221,4 +284,15 @@ func DeleteChannelByStatus(status int64) (int64, error) {
 func DeleteDisabledChannel() (int64, error) {
 	result := DB.Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Delete(&Channel{})
 	return result.RowsAffected, result.Error
+}
+
+// UpdateChannelLastError 记录渠道最近一次上游错误（移植自 one-api-pro）。
+func UpdateChannelLastError(id int, errMsg string) {
+	err := DB.Model(&Channel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"last_error":      errMsg,
+		"last_error_time": helper.GetTimestamp(),
+	}).Error
+	if err != nil {
+		logger.SysError("failed to update channel last error: " + err.Error())
+	}
 }

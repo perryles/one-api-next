@@ -168,6 +168,7 @@ func CacheGetGroupModels(ctx context.Context, group string) ([]string, error) {
 }
 
 var group2model2channels map[string]map[string][]*Channel
+var channelId2channel map[int]*Channel
 var channelSyncLock sync.RWMutex
 
 func InitChannelCache() {
@@ -212,6 +213,7 @@ func InitChannelCache() {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
+	channelId2channel = newChannelId2channel
 	channelSyncLock.Unlock()
 	logger.SysLog("channels synced from database")
 }
@@ -252,4 +254,78 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		}
 	}
 	return channels[idx], nil
+}
+
+// ==== channelrouter 支撑查询（移植自 one-api-pro，见 docs/UPSTREAM.md）====
+
+// GetChannelCandidates 返回分组+模型下的全部启用渠道（按优先级降序），
+// 供 channelrouter 做过滤/选择；内存缓存未启用时直接查库。
+func GetChannelCandidates(group string, modelName string) []*Channel {
+	if !config.MemoryCacheEnabled {
+		var channels []*Channel
+		err := DB.Where("status = ? AND models LIKE ? AND `group` LIKE ?",
+			ChannelStatusEnabled, "%"+modelName+"%", "%"+group+"%").
+			Order("priority DESC").
+			Find(&channels).Error
+		if err != nil {
+			logger.SysError("failed to get channel candidates: " + err.Error())
+			return nil
+		}
+		sort.Slice(channels, func(i, j int) bool {
+			return channels[i].GetPriority() > channels[j].GetPriority()
+		})
+		return channels
+	}
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+	channels := group2model2channels[group][modelName]
+	if len(channels) == 0 {
+		return nil
+	}
+	result := make([]*Channel, len(channels))
+	copy(result, channels)
+	return result
+}
+
+// CacheGetChannelById 从内存缓存按 ID 取渠道（未启用缓存时返回 false）。
+func CacheGetChannelById(channelId int) (*Channel, bool) {
+	if !config.MemoryCacheEnabled {
+		return nil, false
+	}
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+	ch, ok := channelId2channel[channelId]
+	return ch, ok
+}
+
+// GetFallbackChannel 返回指定分组下启用的兜底渠道（is_fallback = true）。
+// 同优先级随机挑选；这里刻意不检查冷却/并发/RPM —— 由调用方在选中后经
+// channelrouter 获取并发额度，兜底失败则直接把错误返回给客户端。
+func GetFallbackChannel(group string) (*Channel, error) {
+	if group == "" {
+		return nil, errors.New("group is empty")
+	}
+	var channels []*Channel
+	groupCol := "`group`"
+	if common.UsingPostgreSQL {
+		groupCol = `"group"`
+	}
+	err := DB.Where("status = ? AND is_fallback = ? AND "+groupCol+" LIKE ?",
+		ChannelStatusEnabled, true, "%"+group+"%").
+		Order("fallback_priority DESC, id DESC").
+		Find(&channels).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(channels) == 0 {
+		return nil, nil
+	}
+	maxPriority := channels[0].GetFallbackPriority()
+	samePriority := make([]*Channel, 0, len(channels))
+	for _, ch := range channels {
+		if ch.GetFallbackPriority() == maxPriority {
+			samePriority = append(samePriority, ch)
+		}
+	}
+	return samePriority[rand.Intn(len(samePriority))], nil
 }

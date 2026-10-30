@@ -21,4 +21,5 @@ const (
 	AvailableModels   = "available_models"
 	KeyRequestBody    = "key_request_body"
 	SystemPrompt      = "system_prompt"
+	SessionKey        = "session_key" // channelrouter 粘性会话（移植自 one-api-pro）
 )
