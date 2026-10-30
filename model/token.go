@@ -6,11 +6,11 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/message"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/common/message"
 )
 
 const (
@@ -28,12 +28,13 @@ type Token struct {
 	Name           string  `json:"name" gorm:"index" `
 	CreatedTime    int64   `json:"created_time" gorm:"bigint"`
 	AccessedTime   int64   `json:"accessed_time" gorm:"bigint"`
-	ExpiredTime    int64   `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
+	ExpiredTime    int64   `json:"expired_time" gorm:"bigint;default:-1"` // <=0 means never expired (legacy: -1)
 	RemainQuota    int64   `json:"remain_quota" gorm:"bigint;default:0"`
 	UnlimitedQuota bool    `json:"unlimited_quota" gorm:"default:false"`
 	UsedQuota      int64   `json:"used_quota" gorm:"bigint;default:0"` // used quota
 	Models         *string `json:"models" gorm:"type:text"`            // allowed models
 	Subnet         *string `json:"subnet" gorm:"default:''"`           // allowed subnet
+	UpdatedAt      int64   `json:"updated_at" gorm:"bigint;default:0"`
 }
 
 func GetAllUserTokens(userId int, startIdx int, num int, order string) ([]*Token, error) {
@@ -79,7 +80,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	if token.Status != TokenStatusEnabled {
 		return nil, errors.New("该令牌状态不可用")
 	}
-	if token.ExpiredTime != -1 && token.ExpiredTime < helper.GetTimestamp() {
+	if token.ExpiredTime > 0 && token.ExpiredTime < helper.GetTimestamp() {
 		if !common.RedisEnabled {
 			token.Status = TokenStatusExpired
 			err := token.SelectUpdate()

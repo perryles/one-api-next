@@ -3,19 +3,14 @@ package controller
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	relay "github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/model"
+	"github.com/perryles/one-api-next/relay/meta"
+	relaymodel "github.com/perryles/one-api-next/relay/schema"
+	"github.com/perryles/one-api-next/relay/registry"
 	"net/http"
 	"strings"
 )
-
-// https://platform.openai.com/docs/api-reference/models/list
 
 type OpenAIModelPermission struct {
 	Id                 string  `json:"id"`
@@ -62,55 +57,35 @@ func init() {
 		Group:              nil,
 		IsBlocking:         false,
 	})
-	// https://platform.openai.com/docs/models/model-endpoint-compatibility
-	for i := 0; i < apitype.Dummy; i++ {
-		if i == apitype.AIProxyLibrary {
-			continue
-		}
-		adaptor := relay.GetAdaptor(i)
-		channelName := adaptor.GetChannelName()
-		modelNames := adaptor.GetModelList()
-		for _, modelName := range modelNames {
-			models = append(models, OpenAIModels{
-				Id:         modelName,
-				Object:     "model",
-				Created:    1626777600,
-				OwnedBy:    channelName,
-				Permission: permission,
-				Root:       modelName,
-				Parent:     nil,
-			})
-		}
-	}
-	for _, channelType := range openai.CompatibleChannels {
-		if channelType == channeltype.Azure {
-			continue
-		}
-		channelName, channelModelList := openai.GetCompatibleChannelMeta(channelType)
-		for _, modelName := range channelModelList {
-			models = append(models, OpenAIModels{
-				Id:         modelName,
-				Object:     "model",
-				Created:    1626777600,
-				OwnedBy:    channelName,
-				Permission: permission,
-				Root:       modelName,
-				Parent:     nil,
-			})
-		}
-	}
 	modelsMap = make(map[string]OpenAIModels)
-	for _, model := range models {
-		modelsMap[model.Id] = model
-	}
 	channelId2Models = make(map[int][]string)
-	for i := 1; i < channeltype.Dummy; i++ {
-		adaptor := relay.GetAdaptor(channeltype.ToAPIType(i))
-		meta := &meta.Meta{
-			ChannelType: i,
+	for _, channelMeta := range registry.AllChannelMetas() {
+		adaptor := registry.GetAdaptor(channelMeta.ID)
+		if adaptor == nil {
+			continue
 		}
-		adaptor.Init(meta)
-		channelId2Models[i] = adaptor.GetModelList()
+		m := &meta.Meta{ChannelType: channelMeta.LegacyType, ChannelID: channelMeta.ID}
+		adaptor.Init(m)
+		modelNames := adaptor.GetModelList()
+		if channelMeta.LegacyType > 0 {
+			channelId2Models[channelMeta.LegacyType] = modelNames
+		}
+		for _, modelName := range modelNames {
+			if _, exists := modelsMap[modelName]; exists {
+				continue
+			}
+			om := OpenAIModels{
+				Id:         modelName,
+				Object:     "model",
+				Created:    1626777600,
+				OwnedBy:    channelMeta.Name,
+				Permission: permission,
+				Root:       modelName,
+				Parent:     nil,
+			}
+			models = append(models, om)
+			modelsMap[modelName] = om
+		}
 	}
 }
 

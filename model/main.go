@@ -3,21 +3,21 @@ package model
 import (
 	"database/sql"
 	"fmt"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/env"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/random"
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 	"os"
 	"strings"
 	"time"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/env"
+	"github.com/perryles/one-api-next/common/helper"
+	appLogger "github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/common/random"
+	"github.com/glebarez/sqlite"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
-
 var DB *gorm.DB
 var LOG_DB *gorm.DB
 
@@ -25,7 +25,7 @@ func CreateRootAccountIfNeed() error {
 	var user User
 	//if user.Status != util.UserStatusEnabled {
 	if err := DB.First(&user).Error; err != nil {
-		logger.SysLog("no user exists, creating a root user for you: username is root, password is 123456")
+		appLogger.SysLog("no user exists, creating a root user for you: username is root, password is 123456")
 		hashedPassword, err := common.Password2Hash("123456")
 		if err != nil {
 			return err
@@ -45,7 +45,7 @@ func CreateRootAccountIfNeed() error {
 		}
 		DB.Create(&rootUser)
 		if config.InitialRootToken != "" {
-			logger.SysLog("creating initial root token as requested")
+			appLogger.SysLog("creating initial root token as requested")
 			token := Token{
 				Id:             1,
 				UserId:         rootUser.Id,
@@ -81,30 +81,56 @@ func chooseDB(envName string) (*gorm.DB, error) {
 }
 
 func openPostgreSQL(dsn string) (*gorm.DB, error) {
-	logger.SysLog("using PostgreSQL as database")
+	appLogger.SysLog("using PostgreSQL as database")
 	common.UsingPostgreSQL = true
 	return gorm.Open(postgres.New(postgres.Config{
 		DSN:                  dsn,
 		PreferSimpleProtocol: true, // disables implicit prepared statement usage
 	}), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
+		Logger: newGormLogger(),
 	})
 }
 
 func openMySQL(dsn string) (*gorm.DB, error) {
-	logger.SysLog("using MySQL as database")
+	appLogger.SysLog("using MySQL as database")
 	common.UsingMySQL = true
 	return gorm.Open(mysql.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
+		Logger: newGormLogger(),
 	})
 }
 
+// gormLogWriter 包装 os.Stdout 实现 gormlogger.Writer 接口
+type gormLogWriter struct{}
+
+// Printf 实现 gormlogger.Writer 接口的 Printf 方法
+func (gormLogWriter) Printf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format, args...)
+}
+
+// newGormLogger 创建一个自定义的 GORM logger
+// 关键设置：IgnoreRecordNotFoundError = true
+// 避免在 First 查询找不到记录时打印误导性的红色 ERROR 日志
+func newGormLogger() gormlogger.Interface {
+	return gormlogger.New(
+		gormLogWriter{},
+		gormlogger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  gormlogger.Warn, // 只记录警告和错误，不记录 info
+			IgnoreRecordNotFoundError: true,            // 忽略 record not found
+			Colorful:                  false,
+		},
+	)
+}
+
 func openSQLite() (*gorm.DB, error) {
-	logger.SysLog("SQL_DSN not set, using SQLite as database")
+	appLogger.SysLog("SQL_DSN not set, using SQLite as database")
 	common.UsingSQLite = true
-	dsn := fmt.Sprintf("%s?_busy_timeout=%d", common.SQLitePath, common.SQLiteBusyTimeout)
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)", common.SQLitePath, common.SQLiteBusyTimeout)
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
+		Logger: newGormLogger(),
 	})
 }
 
@@ -112,7 +138,7 @@ func InitDB() {
 	var err error
 	DB, err = chooseDB("SQL_DSN")
 	if err != nil {
-		logger.FatalLog("failed to initialize database: " + err.Error())
+		appLogger.FatalLog("failed to initialize database: " + err.Error())
 		return
 	}
 
@@ -126,12 +152,17 @@ func InitDB() {
 		_, _ = sqlDB.Exec("DROP INDEX idx_channels_key ON channels;") // TODO: delete this line when most users have upgraded
 	}
 
-	logger.SysLog("database migration started")
+	appLogger.SysLog("database migration started")
 	if err = migrateDB(); err != nil {
-		logger.FatalLog("failed to migrate database: " + err.Error())
+		appLogger.FatalLog("failed to migrate database: " + err.Error())
 		return
 	}
-	logger.SysLog("database migrated")
+	appLogger.SysLog("database migrated")
+	if err = InitDefaultPrices(); err != nil {
+		appLogger.SysError("failed to initialize default prices: " + err.Error())
+	}
+	InitModelPriceCache()
+	InitGroupPriceCache()
 }
 
 func migrateDB() error {
@@ -160,6 +191,58 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&Channel{}); err != nil {
 		return err
 	}
+	if err = DB.AutoMigrate(&Plan{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&UserPlan{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&Order{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&SystemSetting{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&PlanUsage{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&ChannelCounter{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&ModelPrice{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&GroupPrice{}); err != nil {
+		return err
+	}
+	// Add order_id column to existing user_plans on legacy databases.
+	if common.UsingMySQL {
+		var colCount int
+		DB.Raw("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_plans' AND COLUMN_NAME = 'order_id'").Scan(&colCount)
+		if colCount == 0 {
+			DB.Exec("ALTER TABLE user_plans ADD COLUMN order_id int(11) NOT NULL DEFAULT 0 AFTER plan_id")
+		}
+	} else if common.UsingPostgreSQL {
+		var colCount int
+		DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'user_plans' AND column_name = 'order_id'").Scan(&colCount)
+		if colCount == 0 {
+			DB.Exec("ALTER TABLE user_plans ADD COLUMN order_id integer NOT NULL DEFAULT 0")
+		}
+	}
+	// Migrate old tokens column to prompt_tokens if it exists
+	if common.UsingMySQL {
+		var colCount int
+		DB.Raw("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'plan_usages' AND COLUMN_NAME = 'tokens'").Scan(&colCount)
+		if colCount > 0 {
+			DB.Exec("ALTER TABLE plan_usages CHANGE COLUMN tokens prompt_tokens bigint NOT NULL DEFAULT 0")
+		}
+	} else if common.UsingPostgreSQL {
+		var colCount int
+		DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'plan_usages' AND column_name = 'tokens'").Scan(&colCount)
+		if colCount > 0 {
+			DB.Exec("ALTER TABLE plan_usages RENAME COLUMN tokens TO prompt_tokens")
+		}
+	}
 	return nil
 }
 
@@ -169,11 +252,11 @@ func InitLogDB() {
 		return
 	}
 
-	logger.SysLog("using secondary database for table logs")
+	appLogger.SysLog("using secondary database for table logs")
 	var err error
 	LOG_DB, err = chooseDB("LOG_SQL_DSN")
 	if err != nil {
-		logger.FatalLog("failed to initialize secondary database: " + err.Error())
+		appLogger.FatalLog("failed to initialize secondary database: " + err.Error())
 		return
 	}
 
@@ -183,13 +266,13 @@ func InitLogDB() {
 		return
 	}
 
-	logger.SysLog("secondary database migration started")
+	appLogger.SysLog("secondary database migration started")
 	err = migrateLOGDB()
 	if err != nil {
-		logger.FatalLog("failed to migrate secondary database: " + err.Error())
+		appLogger.FatalLog("failed to migrate secondary database: " + err.Error())
 		return
 	}
-	logger.SysLog("secondary database migrated")
+	appLogger.SysLog("secondary database migrated")
 }
 
 func migrateLOGDB() error {
@@ -207,7 +290,7 @@ func setDBConns(db *gorm.DB) *sql.DB {
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		logger.FatalLog("failed to connect database: " + err.Error())
+		appLogger.FatalLog("failed to connect database: " + err.Error())
 		return nil
 	}
 

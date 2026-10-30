@@ -9,17 +9,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/monitor"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/perryles/one-api-next/common/client"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/model"
+	"github.com/perryles/one-api-next/monitor"
+	"github.com/perryles/one-api-next/relay/registry"
 
 	"github.com/gin-gonic/gin"
 )
 
-// https://github.com/songquanpeng/one-api/issues/79
+// https://github.com/perryles/one-api-next/issues/79
 
 type OpenAISubscriptionResponse struct {
 	Object             string  `json:"object"`
@@ -309,34 +309,35 @@ func updateChannelOpenRouterBalance(channel *model.Channel) (float64, error) {
 }
 
 func updateChannelBalance(channel *model.Channel) (float64, error) {
-	baseURL := channeltype.ChannelBaseURLs[channel.Type]
+	channelID := registry.IDByLegacyType(channel.Type)
+	baseURL := registry.GetDefaultBaseURL(channelID)
 	if channel.GetBaseURL() == "" {
 		channel.BaseURL = &baseURL
 	}
-	switch channel.Type {
-	case channeltype.OpenAI:
+	switch channelID {
+	case "openai":
 		if channel.GetBaseURL() != "" {
 			baseURL = channel.GetBaseURL()
 		}
-	case channeltype.Azure:
+	case "azure":
 		return 0, errors.New("尚未实现")
-	case channeltype.Custom:
+	case "custom":
 		baseURL = channel.GetBaseURL()
-	case channeltype.CloseAI:
+	case "closeai":
 		return updateChannelCloseAIBalance(channel)
-	case channeltype.OpenAISB:
+	case "openai-sb":
 		return updateChannelOpenAISBBalance(channel)
-	case channeltype.AIProxy:
+	case "aiproxy":
 		return updateChannelAIProxyBalance(channel)
-	case channeltype.API2GPT:
+	case "api2gpt":
 		return updateChannelAPI2GPTBalance(channel)
-	case channeltype.AIGC2D:
+	case "aigc2d":
 		return updateChannelAIGC2DBalance(channel)
-	case channeltype.SiliconFlow:
+	case "siliconflow":
 		return updateChannelSiliconFlowBalance(channel)
-	case channeltype.DeepSeek:
+	case "deepseek":
 		return updateChannelDeepSeekBalance(channel)
-	case channeltype.OpenRouter:
+	case "openrouter":
 		return updateChannelOpenRouterBalance(channel)
 	default:
 		return 0, errors.New("尚未实现")
@@ -416,7 +417,7 @@ func updateAllChannelsBalance() error {
 			continue
 		}
 		// TODO: support Azure
-		if channel.Type != channeltype.OpenAI && channel.Type != channeltype.Custom {
+		if channelID := registry.IDByLegacyType(channel.Type); channelID != "openai" && channelID != "custom" {
 			continue
 		}
 		balance, err := updateChannelBalance(channel)

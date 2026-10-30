@@ -7,18 +7,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/songquanpeng/one-api/common/env"
+	"github.com/perryles/one-api-next/common/env"
 
 	"github.com/google/uuid"
 )
 
-var SystemName = "One API"
+var SystemName = "One-API-PRO"
 var ServerAddress = "http://localhost:3000"
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
 var ChatLink = ""
-var QuotaPerUnit = 500 * 1000.0 // $0.002 / 1K tokens
+
+// QuotaPerUnit 是额度与货币的换算基准，语义同微信支付的「分」：
+// 1 元 = 1_000_000 quota（即 1 quota = 1e-6 元）。
+// 该值为系统常量，仅参与内部计算，不对外展示、不入库、不可修改；
+// 与「模型定价保留 6 位小数」以及「¥/1M tokens」三者精度对齐。
+//
+// 版本: v0.0.24
+// 日期: 2026-10-03
+const QuotaPerUnit = 1_000_000.0
+
 var DisplayInCurrencyEnabled = true
 var DisplayTokenStatEnabled = true
 
@@ -100,6 +109,25 @@ var PreConsumedQuota int64 = 500
 var ApproximateTokenEnabled = false
 var RetryTimes = 0
 
+var ChannelDefaultCooldownSeconds = env.Int("CHANNEL_DEFAULT_COOLDOWN_SECONDS", 60)
+var ChannelMaxCooldownSeconds = env.Int("CHANNEL_MAX_COOLDOWN_SECONDS", 600)
+var ChannelConcurrencyEnabled = env.Bool("CHANNEL_CONCURRENCY_ENABLED", false)
+var ChannelStickySessionEnabled = env.Bool("CHANNEL_STICKY_SESSION_ENABLED", false)
+
+var ErrorNext = ErrorNextConfig{
+	Passthrough: true,
+	Retry:       true,
+	Disable:     true,
+	Cooldown:    true,
+}
+
+type ErrorNextConfig struct {
+	Passthrough bool `json:"passthrough"`
+	Retry       bool `json:"retry"`
+	Disable     bool `json:"disable"`
+	Cooldown    bool `json:"cooldown"`
+}
+
 var RootUserEmail = ""
 
 var IsMasterNode = os.Getenv("NODE_TYPE") != "slave"
@@ -116,11 +144,12 @@ var RelayTimeout = env.Int("RELAY_TIMEOUT", 0) // unit is second
 
 var GeminiSafetySetting = env.String("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 
-var Theme = env.String("THEME", "default")
+var Theme = env.String("THEME", "default-pro")
 var ValidThemes = map[string]bool{
-	"default": true,
-	"berry":   true,
-	"air":     true,
+	"default-pro": true,
+	"default":     false,
+	"berry":       false,
+	"air":         false,
 }
 
 // All duration's unit is seconds
@@ -164,29 +193,3 @@ var UserContentRequestTimeout = env.Int("USER_CONTENT_REQUEST_TIMEOUT", 30)
 
 var EnforceIncludeUsage = env.Bool("ENFORCE_INCLUDE_USAGE", false)
 var TestPrompt = env.String("TEST_PROMPT", "Output only your specific model name with no additional text.")
-
-// RejectUnknownModelRatio 控制未配置倍率的模型如何处理（机制移植自 omnirelays）：
-// true（默认）= 拒绝计费并返回 400，避免静默按兜底倍率 30 错误扣费；
-// false = 恢复上游历史行为（按 30 计费并记日志）。
-var RejectUnknownModelRatio = env.Bool("REJECT_UNKNOWN_MODEL_RATIO", true)
-
-// ==== channelrouter（移植自 one-api-pro，见 docs/UPSTREAM.md）====
-var ChannelDefaultCooldownSeconds = env.Int("CHANNEL_DEFAULT_COOLDOWN_SECONDS", 60)
-var ChannelMaxCooldownSeconds = env.Int("CHANNEL_MAX_COOLDOWN_SECONDS", 600)
-var ChannelConcurrencyEnabled = env.Bool("CHANNEL_CONCURRENCY_ENABLED", false)
-var ChannelStickySessionEnabled = env.Bool("CHANNEL_STICKY_SESSION_ENABLED", false)
-
-// ErrorNext 控制错误拦截链各动作开关（移植自 one-api-pro）。
-var ErrorNext = ErrorNextConfig{
-	Passthrough: true,
-	Retry:       true,
-	Disable:     true,
-	Cooldown:    true,
-}
-
-type ErrorNextConfig struct {
-	Passthrough bool `json:"passthrough"`
-	Retry       bool `json:"retry"`
-	Disable     bool `json:"disable"`
-	Cooldown    bool `json:"cooldown"`
-}

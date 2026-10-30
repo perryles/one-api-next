@@ -1,10 +1,13 @@
 package controller
 
 import (
+	"encoding/json"
+	"io"
+
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/model"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,10 +26,12 @@ func GetAllChannels(c *gin.Context) {
 		})
 		return
 	}
+	// used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
+	// Balance 保持上游账户原币种（USD），不做换算。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channels,
+		"data":    toChannelDTOs(channels),
 	})
 	return
 }
@@ -41,10 +46,11 @@ func SearchChannels(c *gin.Context) {
 		})
 		return
 	}
+	// used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channels,
+		"data":    toChannelDTOs(channels),
 	})
 	return
 }
@@ -66,10 +72,11 @@ func GetChannel(c *gin.Context) {
 		})
 		return
 	}
+	// used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channel,
+		"data":    toChannelDTO(channel),
 	})
 	return
 }
@@ -146,8 +153,33 @@ func DeleteDisabledChannel(c *gin.Context) {
 }
 
 func UpdateChannel(c *gin.Context) {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
 	channel := model.Channel{}
-	err := c.ShouldBindJSON(&channel)
+	if err := json.Unmarshal(body, &channel); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	// Determine which JSON keys were actually present in the payload so that
+	// Update() only touches those columns. A partial request like {id, status}
+	// must not wipe the channel's other fields to empty.
+	provided := map[string]bool{}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err == nil {
+		for key := range raw {
+			provided[key] = true
+		}
+	}
+	err = channel.Update(provided)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -155,18 +187,11 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
-	err = channel.Update()
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
+	// used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channel,
+		"data":    toChannelDTO(&channel),
 	})
 	return
 }

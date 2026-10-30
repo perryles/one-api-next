@@ -1,83 +1,37 @@
 package openai
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/alibailian"
-	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
-	"github.com/songquanpeng/one-api/relay/adaptor/doubao"
-	"github.com/songquanpeng/one-api/relay/adaptor/geminiv2"
-	"github.com/songquanpeng/one-api/relay/adaptor/minimax"
-	"github.com/songquanpeng/one-api/relay/adaptor/novita"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/perryles/one-api-next/common/conv"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/common/render"
+	"github.com/perryles/one-api-next/relay/adaptor"
+	"github.com/perryles/one-api-next/relay/meta"
+	"github.com/perryles/one-api-next/relay/schema"
+	"github.com/perryles/one-api-next/relay/relaymode"
 )
 
 type Adaptor struct {
-	ChannelType int
 }
 
 func (a *Adaptor) Init(meta *meta.Meta) {
-	a.ChannelType = meta.ChannelType
 }
 
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	switch meta.ChannelType {
-	case channeltype.Azure:
-		if meta.Mode == relaymode.ImagesGenerations {
-			// https://learn.microsoft.com/en-us/azure/ai-services/openai/dall-e-quickstart?tabs=dalle3%2Ccommand-line&pivots=rest-api
-			// https://{resource_name}.openai.azure.com/openai/deployments/dall-e-3/images/generations?api-version=2024-03-01-preview
-			fullRequestURL := fmt.Sprintf("%s/openai/deployments/%s/images/generations?api-version=%s", meta.BaseURL, meta.ActualModelName, meta.Config.APIVersion)
-			return fullRequestURL, nil
-		}
-
-		// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
-		requestURL := strings.Split(meta.RequestURLPath, "?")[0]
-		requestURL = fmt.Sprintf("%s?api-version=%s", requestURL, meta.Config.APIVersion)
-		task := strings.TrimPrefix(requestURL, "/v1/")
-		model_ := meta.ActualModelName
-		model_ = strings.Replace(model_, ".", "", -1)
-		//https://github.com/songquanpeng/one-api/issues/1191
-		// {your endpoint}/openai/deployments/{your azure_model}/chat/completions?api-version={api_version}
-		requestURL = fmt.Sprintf("/openai/deployments/%s/%s", model_, task)
-		return GetFullRequestURL(meta.BaseURL, requestURL, meta.ChannelType), nil
-	case channeltype.Minimax:
-		return minimax.GetRequestURL(meta)
-	case channeltype.Doubao:
-		return doubao.GetRequestURL(meta)
-	case channeltype.Novita:
-		return novita.GetRequestURL(meta)
-	case channeltype.BaiduV2:
-		return baiduv2.GetRequestURL(meta)
-	case channeltype.AliBailian:
-		return alibailian.GetRequestURL(meta)
-	case channeltype.GeminiOpenAICompatible:
-		return geminiv2.GetRequestURL(meta)
-	default:
-		return GetFullRequestURL(meta.BaseURL, meta.RequestURLPath, meta.ChannelType), nil
-	}
+	return GetFullRequestURL(meta.BaseURL, meta.RequestURLPath, meta.ChannelID), nil
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
-	if meta.ChannelType == channeltype.Azure {
-		req.Header.Set("api-key", meta.APIKey)
-		return nil
-	}
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
-	if meta.ChannelType == channeltype.OpenRouter {
-		req.Header.Set("HTTP-Referer", "https://github.com/songquanpeng/one-api")
-		req.Header.Set("X-Title", "One API")
-	}
 	return nil
 }
 
@@ -86,7 +40,6 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		return nil, errors.New("request is nil")
 	}
 	if request.Stream {
-		// always return usage in stream mode
 		if request.StreamOptions == nil {
 			request.StreamOptions = &model.StreamOptions{}
 		}
@@ -109,11 +62,61 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta.IsStream {
 		var responseText string
-		err, responseText, usage = StreamHandler(c, resp, meta.Mode)
+		relayMode := meta.Mode
+		pipeline := &adaptor.StreamPipeline{
+			SplitFunc: bufio.ScanLines,
+			ProcessLine: func(raw []byte) (any, *model.Usage) {
+				data := string(raw)
+				if len(data) < dataPrefixLength {
+					return nil, nil
+				}
+				if data[:dataPrefixLength] != dataPrefix && data[:dataPrefixLength] != done {
+					return nil, nil
+				}
+				if strings.HasPrefix(data[dataPrefixLength:], done) {
+					return nil, nil
+				}
+				switch relayMode {
+				case relaymode.ChatCompletions:
+					var streamResponse ChatCompletionsStreamResponse
+					err := json.Unmarshal([]byte(data[dataPrefixLength:]), &streamResponse)
+					if err != nil {
+						logger.SysError("error unmarshalling stream response: " + err.Error())
+						return data, nil
+					}
+					if len(streamResponse.Choices) == 0 && streamResponse.Usage == nil {
+						return nil, nil
+					}
+					for _, choice := range streamResponse.Choices {
+						responseText += conv.AsString(choice.Delta.Content)
+					}
+					return data, streamResponse.Usage
+				case relaymode.Completions:
+					var streamResponse CompletionsStreamResponse
+					err := json.Unmarshal([]byte(data[dataPrefixLength:]), &streamResponse)
+					if err != nil {
+						logger.SysError("error unmarshalling stream response: " + err.Error())
+						return nil, nil
+					}
+					for _, choice := range streamResponse.Choices {
+						responseText += choice.Text
+					}
+					return data, nil
+				}
+				return nil, nil
+			},
+			Render: func(c *gin.Context, chunk any) {
+				render.StringData(c, chunk.(string))
+			},
+			MergeUsage: func(acc, inc *model.Usage) {
+				*acc = *inc
+			},
+		}
+		err, usage = pipeline.Run(c, resp)
 		if usage == nil || usage.TotalTokens == 0 {
 			usage = ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
 		}
-		if usage.TotalTokens != 0 && usage.PromptTokens == 0 { // some channels don't return prompt tokens & completion tokens
+		if usage != nil && usage.TotalTokens != 0 && usage.PromptTokens == 0 {
 			usage.PromptTokens = meta.PromptTokens
 			usage.CompletionTokens = usage.TotalTokens - meta.PromptTokens
 		}
@@ -129,11 +132,5 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 }
 
 func (a *Adaptor) GetModelList() []string {
-	_, modelList := GetCompatibleChannelMeta(a.ChannelType)
-	return modelList
-}
-
-func (a *Adaptor) GetChannelName() string {
-	channelName, _ := GetCompatibleChannelMeta(a.ChannelType)
-	return channelName
+	return ModelList
 }

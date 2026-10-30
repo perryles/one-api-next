@@ -1,0 +1,18 @@
+package siliconflow
+
+import (
+	"github.com/perryles/one-api-next/relay/adaptor"
+	"github.com/perryles/one-api-next/relay/adaptor/openai"
+	"github.com/perryles/one-api-next/relay/registry"
+)
+
+func init() {
+	registry.Register(registry.ChannelMeta{
+		ID:             "siliconflow",
+		Name:           "SiliconFlow",
+		DefaultBaseURL: "https://api.siliconflow.cn",
+		LegacyType:     44,
+	}, func() adaptor.Adaptor {
+		return &Adaptor{Adaptor: &openai.Adaptor{}}
+	})
+}

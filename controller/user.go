@@ -10,12 +10,13 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/i18n"
-	"github.com/songquanpeng/one-api/common/random"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/common/i18n"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/common/random"
+	"github.com/perryles/one-api-next/model"
 )
 
 type LoginRequest struct {
@@ -201,10 +202,23 @@ func GetAllUsers(c *gin.Context) {
 		return
 	}
 
+	userIds := make([]int, len(users))
+	for i, u := range users {
+		userIds[i] = u.Id
+	}
+	subMap, _ := model.GetUserSubscriptionBriefs(userIds)
+	for _, u := range users {
+		if subs, ok := subMap[u.Id]; ok {
+			u.Plans = subs
+		}
+		u.AccessToken = ""
+	}
+
+	// quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    toUserDTOs(users),
 	})
 }
 
@@ -218,10 +232,24 @@ func SearchUsers(c *gin.Context) {
 		})
 		return
 	}
+
+	userIds := make([]int, len(users))
+	for i, u := range users {
+		userIds[i] = u.Id
+	}
+	subMap, _ := model.GetUserSubscriptionBriefs(userIds)
+	for _, u := range users {
+		if subs, ok := subMap[u.Id]; ok {
+			u.Plans = subs
+		}
+		u.AccessToken = ""
+	}
+
+	// quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    toUserDTOs(users),
 	})
 	return
 }
@@ -251,10 +279,11 @@ func GetUser(c *gin.Context) {
 		})
 		return
 	}
+	// quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
+		"data":    toUserDTO(user),
 	})
 	return
 }
@@ -277,7 +306,7 @@ func GetUserDashboard(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    dashboards,
+		"data":    toLogStatisticDTOs(dashboards),
 	})
 	return
 }
@@ -356,25 +385,28 @@ func GetSelf(c *gin.Context) {
 		})
 		return
 	}
+	// quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
+		"data":    toUserDTO(user),
 	})
 	return
 }
 
 func UpdateUser(c *gin.Context) {
 	ctx := c.Request.Context()
-	var updatedUser model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&updatedUser)
-	if err != nil || updatedUser.Id == 0 {
+	// quota 以「元」传入，解析后换算回微元（见 quota_dto.go）。
+	var req updateUserRequest
+	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	if err != nil || req.Id == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": i18n.Translate(c, "invalid_parameter"),
 		})
 		return
 	}
+	updatedUser := req.toModel()
 	if updatedUser.Password == "" {
 		updatedUser.Password = "$I_LOVE_U" // make Validator happy :)
 	}
@@ -419,8 +451,26 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
+	// GORM 的 Updates(struct) 会跳过零值字段，导致「把额度清零」静默失效（接口返回成功但额度不变）。
+	// 因此仅当请求显式携带 quota（含 quota=0）时，按列补写一次。
+	// Updates(struct) skips zero values, so an explicit quota=0 would be silently dropped;
+	// write the column directly whenever the client sent a quota field.
+	if req.Quota != nil {
+		if err := model.UpdateUserQuotaColumn(updatedUser.Id, updatedUser.Quota); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+	}
 	if originUser.Quota != updatedUser.Quota {
 		model.RecordLog(ctx, originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", common.LogQuota(originUser.Quota), common.LogQuota(updatedUser.Quota)))
+		// DB quota field was overwritten — refresh Redis so the next request
+		// sees the new balance instead of a stale cached value.
+		if cerr := model.CacheUpdateUserQuota(ctx, updatedUser.Id); cerr != nil {
+			logger.SysError(fmt.Sprintf("UpdateUser: cache refresh failed for user %d: %s", updatedUser.Id, cerr.Error()))
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -593,12 +643,37 @@ type ManageRequest struct {
 	Action   string `json:"action"`
 }
 
+// BatchManageRequest 批量管理用户请求体（复用 /api/user/manage 入口）
+// Batch user-management request body (reuses the /api/user/manage entry).
+type BatchManageRequest struct {
+	Action    string   `json:"action"`
+	Usernames []string `json:"usernames"`
+}
+
 // ManageUser Only admin user can do this
 func ManageUser(c *gin.Context) {
-	var req ManageRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	// 批量分支：优先按 BatchManageRequest 解析，复用同一路由入口
+	// Batch branch: decode as BatchManageRequest first, reuses the same route.
+	var probe map[string]json.RawMessage
+	if err := json.NewDecoder(c.Request.Body).Decode(&probe); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": i18n.Translate(c, "invalid_parameter"),
+		})
+		return
+	}
+	if _, hasUsernames := probe["usernames"]; hasUsernames {
+		var batch BatchManageRequest
+		// Re-marshal probe and decode as BatchManageRequest to keep one source of truth.
+		buf, _ := json.Marshal(probe)
+		_ = json.Unmarshal(buf, &batch)
+		manageUserBatch(c, batch)
+		return
+	}
 
-	if err != nil {
+	var req ManageRequest
+	buf, _ := json.Marshal(probe)
+	if err := json.Unmarshal(buf, &req); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": i18n.Translate(c, "invalid_parameter"),
@@ -624,6 +699,17 @@ func ManageUser(c *gin.Context) {
 			"message": "无权更新同权限等级或更高权限等级的用户信息",
 		})
 		return
+	}
+	// 删除 / 禁用（含批量）仅 root：与 promote/demote 的现有 root-only 校验风格一致
+	// Delete / disable (incl. batch) are root-only; matches promote/demote's root-only style.
+	if req.Action == "delete" || req.Action == "disable" {
+		if myRole != model.RoleRootUser {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "删除/禁用用户仅超级管理员可操作",
+			})
+			return
+		}
 	}
 	switch req.Action {
 	case "disable":
@@ -652,6 +738,7 @@ func ManageUser(c *gin.Context) {
 			})
 			return
 		}
+		model.RecordLog(c.Request.Context(), user.Id, model.LogTypeManage, "管理员删除用户")
 	case "promote":
 		if myRole != model.RoleRootUser {
 			c.JSON(http.StatusOK, gin.H{
@@ -693,6 +780,11 @@ func ManageUser(c *gin.Context) {
 		})
 		return
 	}
+	// 单条操作的审计日志：删除已在 switch 内记；禁用在此记
+	// Single-action audit log: delete is logged inside the switch; disable here.
+	if req.Action == "disable" {
+		model.RecordLog(c.Request.Context(), user.Id, model.LogTypeManage, "管理员禁用用户")
+	}
 	clearUser := model.User{
 		Role:   user.Role,
 		Status: user.Status,
@@ -703,6 +795,127 @@ func ManageUser(c *gin.Context) {
 		"data":    clearUser,
 	})
 	return
+}
+
+// manageUserBatch 批量管理用户：仅超级管理员可调用，删除/禁用两类操作
+// Batch user-management helper: root-only, supports batch-delete and batch-disable.
+// 返回 data 形如：
+//   { succeeded: [..], failed: { name: reason }, total, succeeded_count, failed_count }
+func manageUserBatch(c *gin.Context, req BatchManageRequest) {
+	if len(req.Usernames) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请至少选择一个用户",
+		})
+		return
+	}
+	myRole := c.GetInt("role")
+	if myRole != model.RoleRootUser {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "批量删除/禁用用户仅超级管理员可操作",
+		})
+		return
+	}
+	currentUsername, _ := c.Get("username")
+	currentName, _ := currentUsername.(string)
+
+	// 一次性查所有匹配用户，循环内逐条复用单接口规则
+	// Fetch all matching users in one shot; per-user rules mirror the single endpoint.
+	var users []model.User
+	if err := model.DB.Where("username IN ?", req.Usernames).Find(&users).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	found := make(map[string]model.User, len(users))
+	for i := range users {
+		found[users[i].Username] = users[i]
+	}
+
+	var logContent string
+	switch req.Action {
+	case "batch-delete":
+		logContent = "管理员批量删除用户"
+	case "batch-disable":
+		logContent = "管理员批量禁用用户"
+	default:
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": i18n.Translate(c, "invalid_parameter"),
+		})
+		return
+	}
+
+	succeeded := make([]string, 0, len(req.Usernames))
+	failed := make(map[string]string)
+
+	for _, name := range req.Usernames {
+		u, ok := found[name]
+		if !ok {
+			failed[name] = "用户不存在"
+			continue
+		}
+		if u.Role == model.RoleRootUser {
+			failed[name] = "无法操作超级管理员用户"
+			continue
+		}
+		if currentName != "" && name == currentName {
+			failed[name] = "不能对自己执行该操作"
+			continue
+		}
+		var opErr error
+		switch req.Action {
+		case "batch-delete":
+			opErr = u.Delete()
+		case "batch-disable":
+			u.Status = model.UserStatusDisabled
+			opErr = u.Update(false)
+		}
+		if opErr != nil {
+			failed[name] = opErr.Error()
+			continue
+		}
+		succeeded = append(succeeded, name)
+		// 与现有 LogTypeManage 风格一致：每用户一条日志，便于按用户过滤
+		// One log per user (matches existing LogTypeManage style for per-user filtering).
+		model.RecordLog(c.Request.Context(), u.Id, model.LogTypeManage, logContent)
+	}
+
+	total := len(req.Usernames)
+	failedCount := len(failed)
+	succeededCount := len(succeeded)
+
+	// 全部失败视为整体失败，避免前端误以为"成功"
+	// If every entry failed, treat the whole batch as failed.
+	if succeededCount == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "所有用户均操作失败",
+			"data": gin.H{
+				"succeeded":       succeeded,
+				"failed":          failed,
+				"total":           total,
+				"succeeded_count": succeededCount,
+				"failed_count":    failedCount,
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"succeeded":       succeeded,
+			"failed":          failed,
+			"total":           total,
+			"succeeded_count": succeededCount,
+			"failed_count":    failedCount,
+		},
+	})
 }
 
 func EmailBind(c *gin.Context) {
@@ -771,18 +984,19 @@ func TopUp(c *gin.Context) {
 		})
 		return
 	}
+	// quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    quota,
+		"data":    quotaToYuan(quota),
 	})
 	return
 }
 
 type adminTopUpRequest struct {
-	UserId int    `json:"user_id"`
-	Quota  int    `json:"quota"`
-	Remark string `json:"remark"`
+	UserId int     `json:"user_id"`
+	Quota  float64 `json:"quota"` // 单位：元（见 quota_dto.go）
+	Remark string  `json:"remark"`
 }
 
 func AdminTopUp(c *gin.Context) {
@@ -796,7 +1010,9 @@ func AdminTopUp(c *gin.Context) {
 		})
 		return
 	}
-	err = model.IncreaseUserQuota(req.UserId, int64(req.Quota))
+	// quota 以「元」传入，换算回微元后再入库（见 quota_dto.go）。
+	quotaMicro := yuanToQuota(req.Quota)
+	err = model.IncreaseUserQuota(req.UserId, quotaMicro)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -805,9 +1021,9 @@ func AdminTopUp(c *gin.Context) {
 		return
 	}
 	if req.Remark == "" {
-		req.Remark = fmt.Sprintf("通过 API 充值 %s", common.LogQuota(int64(req.Quota)))
+		req.Remark = fmt.Sprintf("通过 API 充值 %s", common.LogQuota(quotaMicro))
 	}
-	model.RecordTopupLog(ctx, req.UserId, req.Remark, req.Quota)
+	model.RecordTopupLog(ctx, req.UserId, req.Remark, int(quotaMicro))
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

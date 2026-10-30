@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/model"
 )
 
 type PriorityRandomSelector struct{}

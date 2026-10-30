@@ -1,6 +1,6 @@
 package openai
 
-import "github.com/songquanpeng/one-api/relay/model"
+import "github.com/perryles/one-api-next/relay/schema"
 
 type TextContent struct {
 	Type string `json:"type,omitempty"`

@@ -1,17 +1,20 @@
 package model
 
 import (
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/logger"
 )
 
 type Option struct {
-	Key   string `json:"key" gorm:"primaryKey"`
-	Value string `json:"value"`
+	Key       string `json:"key" gorm:"primaryKey"`
+	Value     string `json:"value"`
+	CreatedAt int64  `json:"created_at" gorm:"bigint;default:0"`
+	UpdatedAt int64  `json:"updated_at" gorm:"bigint;default:0"`
 }
 
 func AllOption() ([]*Option, error) {
@@ -67,14 +70,17 @@ func InitOptionMap() {
 	config.OptionMap["QuotaForInvitee"] = strconv.FormatInt(config.QuotaForInvitee, 10)
 	config.OptionMap["QuotaRemindThreshold"] = strconv.FormatInt(config.QuotaRemindThreshold, 10)
 	config.OptionMap["PreConsumedQuota"] = strconv.FormatInt(config.PreConsumedQuota, 10)
-	config.OptionMap["ModelRatio"] = billingratio.ModelRatio2JSONString()
-	config.OptionMap["GroupRatio"] = billingratio.GroupRatio2JSONString()
-	config.OptionMap["CompletionRatio"] = billingratio.CompletionRatio2JSONString()
-	config.OptionMap["ContextPriceTiers"] = billingratio.ContextPriceTiersJSON()
 	config.OptionMap["TopUpLink"] = config.TopUpLink
 	config.OptionMap["ChatLink"] = config.ChatLink
-	config.OptionMap["QuotaPerUnit"] = strconv.FormatFloat(config.QuotaPerUnit, 'f', -1, 64)
+	// QuotaPerUnit 为系统常量（1 元 = 1_000_000 额度），不写入 OptionMap、不入库、不可修改。
+	// 前端如需展示基准，可通过 /api/status 的 quota_per_unit 只读获取。
 	config.OptionMap["RetryTimes"] = strconv.Itoa(config.RetryTimes)
+	config.OptionMap["ChannelDefaultCooldownSeconds"] = strconv.Itoa(config.ChannelDefaultCooldownSeconds)
+	config.OptionMap["ChannelMaxCooldownSeconds"] = strconv.Itoa(config.ChannelMaxCooldownSeconds)
+	config.OptionMap["ChannelConcurrencyEnabled"] = strconv.FormatBool(config.ChannelConcurrencyEnabled)
+	config.OptionMap["ChannelStickySessionEnabled"] = strconv.FormatBool(config.ChannelStickySessionEnabled)
+	errorNextJSON, _ := json.Marshal(config.ErrorNext)
+	config.OptionMap["ErrorNext"] = string(errorNextJSON)
 	config.OptionMap["Theme"] = config.Theme
 	config.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
@@ -83,14 +89,6 @@ func InitOptionMap() {
 func loadOptionsFromDatabase() {
 	options, _ := AllOption()
 	for _, option := range options {
-		if option.Key == "ModelRatio" {
-			option.Value = billingratio.AddNewMissingRatio(option.Value)
-		}
-		// one-api-next 修复：输出倍率与输入倍率一样，对存量库做增量合并，
-		// 否则新版本的 CompletionRatio 默认值永远无法下发到已有数据库。
-		if option.Key == "CompletionRatio" {
-			option.Value = billingratio.AddNewMissingCompletionRatio(option.Value)
-		}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
 			logger.SysError("failed to update option map: " + err.Error())
@@ -159,6 +157,10 @@ func updateOptionMap(key string, value string) (err error) {
 			config.DisplayInCurrencyEnabled = boolValue
 		case "DisplayTokenStatEnabled":
 			config.DisplayTokenStatEnabled = boolValue
+		case "ChannelConcurrencyEnabled":
+			config.ChannelConcurrencyEnabled = boolValue
+		case "ChannelStickySessionEnabled":
+			config.ChannelStickySessionEnabled = boolValue
 		}
 	}
 	switch key {
@@ -229,22 +231,21 @@ func updateOptionMap(key string, value string) (err error) {
 		config.PreConsumedQuota, _ = strconv.ParseInt(value, 10, 64)
 	case "RetryTimes":
 		config.RetryTimes, _ = strconv.Atoi(value)
-	case "ModelRatio":
-		err = billingratio.UpdateModelRatioByJSONString(value)
-	case "GroupRatio":
-		err = billingratio.UpdateGroupRatioByJSONString(value)
-	case "CompletionRatio":
-		err = billingratio.UpdateCompletionRatioByJSONString(value)
-	case "ContextPriceTiers":
-		err = billingratio.UpdateContextPriceTiers(value)
+	case "ChannelDefaultCooldownSeconds":
+		config.ChannelDefaultCooldownSeconds, _ = strconv.Atoi(value)
+	case "ChannelMaxCooldownSeconds":
+		config.ChannelMaxCooldownSeconds, _ = strconv.Atoi(value)
+	case "ErrorNext":
+		var enc config.ErrorNextConfig
+		if err := json.Unmarshal([]byte(value), &enc); err == nil {
+			config.ErrorNext = enc
+		}
 	case "TopUpLink":
 		config.TopUpLink = value
 	case "ChatLink":
 		config.ChatLink = value
 	case "ChannelDisableThreshold":
 		config.ChannelDisableThreshold, _ = strconv.ParseFloat(value, 64)
-	case "QuotaPerUnit":
-		config.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "Theme":
 		config.Theme = value
 	}

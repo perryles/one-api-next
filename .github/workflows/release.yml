@@ -1,0 +1,98 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0). Leave empty to use the pushed tag."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        run: |
+          cd web
+          sh build.sh
+          cd ..
+
+      - name: Build binaries
+        run: |
+          LDFLAGS="-s -w -X github.com/perryles/one-api-next/common.Version=${TAG}"
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/one-api-pro-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/one-api-pro-linux-arm64 .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/one-api-pro-windows-amd64.exe .
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/one-api-pro-darwin-amd64 .
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/one-api-pro-darwin-arm64 .
+
+      - name: Normalize tag (auto-prefix v)
+        id: tag
+        run: |
+          raw="${{ env.TAG }}"
+          case "$raw" in
+            v*) normalized="$raw" ;;
+            *)   normalized="v$raw" ;;
+          esac
+          if [ -z "$raw" ]; then
+            echo "::error::Tag is empty. Pass a tag via push (v*) or workflow_dispatch input."
+            exit 1
+          fi
+          if ! [[ "$normalized" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-].+)?$ ]]; then
+            echo "::error::Tag '$raw' (normalized to '$normalized') does not look like a semver tag (vX.Y.Z)."
+            exit 1
+          fi
+          echo "normalized=$normalized" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $normalized"
+
+      - name: Verify CHANGELOG exists
+        env:
+          TAG: ${{ steps.tag.outputs.normalized }}
+        run: |
+          SRC="CHANGELOG/${TAG}.md"
+          if [ ! -f "$SRC" ]; then
+            echo "::error::CHANGELOG file not found: $SRC"
+            echo "Every released tag must have a matching CHANGELOG/<tag>.md before tagging."
+            echo "Create $SRC with the release notes, commit it, then re-tag or delete and re-push the tag."
+            exit 1
+          fi
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.normalized }}
+          name: ${{ steps.tag.outputs.normalized }}
+          body_path: CHANGELOG/${{ steps.tag.outputs.normalized }}.md
+          files: |
+            dist/one-api-pro-linux-amd64
+            dist/one-api-pro-linux-arm64
+            dist/one-api-pro-windows-amd64.exe
+            dist/one-api-pro-darwin-amd64
+            dist/one-api-pro-darwin-arm64

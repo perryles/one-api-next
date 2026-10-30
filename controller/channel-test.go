@@ -17,21 +17,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/message"
-	"github.com/songquanpeng/one-api/middleware"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/monitor"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/controller"
-	"github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/common/message"
+	"github.com/perryles/one-api-next/middleware"
+	"github.com/perryles/one-api-next/model"
+	"github.com/perryles/one-api-next/monitor"
+	"github.com/perryles/one-api-next/relay"
+	"github.com/perryles/one-api-next/relay/adaptor/openai"
+	"github.com/perryles/one-api-next/relay/handler"
+	"github.com/perryles/one-api-next/relay/meta"
+	relaymodel "github.com/perryles/one-api-next/relay/schema"
+	"github.com/perryles/one-api-next/relay/relaymode"
 )
 
 func buildTestRequest(model string) *relaymodel.GeneralOpenAIRequest {
@@ -83,10 +82,9 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	c.Set(ctxkey.Config, cfg)
 	middleware.SetupContextForSelectedChannel(c, channel, "")
 	meta := meta.GetByContext(c)
-	apiType := channeltype.ToAPIType(channel.Type)
-	adaptor := relay.GetAdaptor(apiType)
+	adaptor := relay.GetAdaptorByChannel(channel.Type)
 	if adaptor == nil {
-		return "", fmt.Errorf("invalid api type: %d, adaptor is nil", apiType), nil
+		return "", fmt.Errorf("invalid channel type: %d, adaptor is nil", channel.Type), nil
 	}
 	adaptor.Init(meta)
 	modelName := request.Model

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common/blacklist"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/network"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/common/blacklist"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/common/network"
+	"github.com/perryles/one-api-next/model"
 	"net/http"
 	"strings"
 )
@@ -143,6 +143,10 @@ func TokenAuth() func(c *gin.Context) {
 
 		// set channel id for proxy relay
 		if channelId := c.Param("channelid"); channelId != "" {
+			if !model.IsAdmin(token.UserId) {
+				abortWithMessage(c, http.StatusForbidden, "普通用户不支持指定渠道")
+				return
+			}
 			c.Set(ctxkey.SpecificChannelId, channelId)
 		}
 

@@ -2,8 +2,8 @@ package adaptor
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/relay/meta"
+	"github.com/perryles/one-api-next/relay/schema"
 	"io"
 	"net/http"
 )
@@ -17,5 +17,4 @@ type Adaptor interface {
 	DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error)
 	DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
 	GetModelList() []string
-	GetChannelName() string
 }

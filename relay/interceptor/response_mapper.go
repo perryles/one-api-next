@@ -3,8 +3,8 @@ package interceptor
 import (
 	"fmt"
 
-	"github.com/songquanpeng/one-api/relay/errcode"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/relay/errcode"
+	"github.com/perryles/one-api-next/relay/schema"
 )
 
 type ResponseMapperHandler struct{}

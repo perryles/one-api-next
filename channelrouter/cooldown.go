@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/logger"
 )
 
 type CooldownEntry struct {

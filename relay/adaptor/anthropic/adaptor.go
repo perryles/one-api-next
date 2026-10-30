@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/relay/adaptor"
+	"github.com/perryles/one-api-next/relay/meta"
+	"github.com/perryles/one-api-next/relay/schema"
 )
 
 type Adaptor struct {
@@ -72,8 +72,4 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 
 func (a *Adaptor) GetModelList() []string {
 	return ModelList
-}
-
-func (a *Adaptor) GetChannelName() string {
-	return "anthropic"
 }

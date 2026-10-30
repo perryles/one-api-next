@@ -3,7 +3,7 @@ package channelrouter
 import (
 	"context"
 
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/model"
 )
 
 type RouteRequest struct {

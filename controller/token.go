@@ -3,12 +3,12 @@ package controller
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/network"
-	"github.com/songquanpeng/one-api/common/random"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/common/network"
+	"github.com/perryles/one-api-next/common/random"
+	"github.com/perryles/one-api-next/model"
 	"net/http"
 	"strconv"
 )
@@ -30,10 +30,11 @@ func GetAllTokens(c *gin.Context) {
 		})
 		return
 	}
+	// remain_quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    toTokenDTOs(tokens),
 	})
 	return
 }
@@ -49,10 +50,11 @@ func SearchTokens(c *gin.Context) {
 		})
 		return
 	}
+	// remain_quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    toTokenDTOs(tokens),
 	})
 	return
 }
@@ -75,10 +77,11 @@ func GetToken(c *gin.Context) {
 		})
 		return
 	}
+	// remain_quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    token,
+		"data":    toTokenDTO(token),
 	})
 	return
 }
@@ -121,8 +124,9 @@ func validateToken(c *gin.Context, token model.Token) error {
 }
 
 func AddToken(c *gin.Context) {
-	token := model.Token{}
-	err := c.ShouldBindJSON(&token)
+	// remain_quota 以「元」传入，解析后换算回微元（见 quota_dto.go）。
+	var req tokenWriteRequest
+	err := c.ShouldBindJSON(&req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -130,6 +134,7 @@ func AddToken(c *gin.Context) {
 		})
 		return
 	}
+	token := req.toToken()
 	err = validateToken(c, token)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -162,7 +167,7 @@ func AddToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    cleanToken,
+		"data":    toTokenDTO(&cleanToken),
 	})
 	return
 }
@@ -188,8 +193,9 @@ func DeleteToken(c *gin.Context) {
 func UpdateToken(c *gin.Context) {
 	userId := c.GetInt(ctxkey.Id)
 	statusOnly := c.Query("status_only")
-	token := model.Token{}
-	err := c.ShouldBindJSON(&token)
+	// remain_quota 以「元」传入，解析后换算回微元（见 quota_dto.go）。
+	var req tokenWriteRequest
+	err := c.ShouldBindJSON(&req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -197,6 +203,7 @@ func UpdateToken(c *gin.Context) {
 		})
 		return
 	}
+	token := req.toToken()
 	err = validateToken(c, token)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -214,7 +221,7 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 	if token.Status == model.TokenStatusEnabled {
-		if cleanToken.Status == model.TokenStatusExpired && cleanToken.ExpiredTime <= helper.GetTimestamp() && cleanToken.ExpiredTime != -1 {
+		if cleanToken.Status == model.TokenStatusExpired && cleanToken.ExpiredTime > 0 && cleanToken.ExpiredTime <= helper.GetTimestamp() {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "令牌已过期，无法启用，请先修改令牌过期时间，或者设置为永不过期",
@@ -248,10 +255,11 @@ func UpdateToken(c *gin.Context) {
 		})
 		return
 	}
+	// remain_quota/used_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    cleanToken,
+		"data":    toTokenDTO(cleanToken),
 	})
 	return
 }

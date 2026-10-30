@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/common/logger"
 	"gorm.io/gorm"
 )
 
@@ -39,14 +39,14 @@ type Channel struct {
 	Priority           *int64  `json:"priority" gorm:"bigint;default:0"`
 	Config             string  `json:"config"`
 	SystemPrompt       *string `json:"system_prompt" gorm:"type:text"`
-	// ==== channelrouter 字段（移植自 one-api-pro，默认关闭，见 docs/UPSTREAM.md）====
-	MaxConcurrency   *int   `json:"max_concurrency" gorm:"default:0"`
-	RPM              *int   `json:"rpm" gorm:"default:0"`
-	CooldownSeconds  int    `json:"cooldown_seconds" gorm:"default:60"`
-	IsFallback       *bool  `json:"is_fallback" gorm:"default:0"`
-	FallbackPriority *int64 `json:"fallback_priority" gorm:"bigint;default:0"`
-	LastError        string `json:"last_error" gorm:"type:text"`
-	LastErrorTime    int64  `json:"last_error_time" gorm:"bigint;default:0"`
+	MaxConcurrency     *int    `json:"max_concurrency" gorm:"default:0"`
+	CooldownSeconds    int     `json:"cooldown_seconds" gorm:"default:60"`
+	RPM                *int    `json:"rpm" gorm:"default:0"`
+	LastError          string  `json:"last_error" gorm:"type:varchar(512);default:''"`
+	LastErrorTime      int64   `json:"last_error_time" gorm:"bigint;default:0"`
+	IsFallback         *bool   `json:"is_fallback" gorm:"default:0"`
+	FallbackPriority   *int64  `json:"fallback_priority" gorm:"bigint;default:0"`
+	UpdatedAt          int64   `json:"updated_at" gorm:"bigint;default:0"`
 }
 
 type ChannelConfig struct {
@@ -60,6 +60,8 @@ type ChannelConfig struct {
 	VertexAIProjectID string `json:"vertex_ai_project_id,omitempty"`
 	VertexAIADC       string `json:"vertex_ai_adc,omitempty"`
 }
+
+
 
 func GetAllChannels(startIdx int, num int, scope string) ([]*Channel, error) {
 	var channels []*Channel
@@ -113,34 +115,11 @@ func (channel *Channel) GetPriority() int64 {
 	return *channel.Priority
 }
 
-// ==== channelrouter 访问器（移植自 one-api-pro）====
-
-func (channel *Channel) GetMaxConcurrency() int {
-	if channel.MaxConcurrency == nil {
-		return 0
+func (channel *Channel) GetBaseURL() string {
+	if channel.BaseURL == nil {
+		return ""
 	}
-	return *channel.MaxConcurrency
-}
-
-func (channel *Channel) GetRPM() int {
-	if channel.RPM == nil {
-		return 0
-	}
-	return *channel.RPM
-}
-
-func (channel *Channel) GetIsFallback() bool {
-	if channel.IsFallback == nil {
-		return false
-	}
-	return *channel.IsFallback
-}
-
-func (channel *Channel) GetFallbackPriority() int64 {
-	if channel.FallbackPriority == nil {
-		return 0
-	}
-	return *channel.FallbackPriority
+	return *channel.BaseURL
 }
 
 func (channel *Channel) ContainsGroup(group string) bool {
@@ -167,13 +146,6 @@ func (channel *Channel) ContainsModel(modelName string) bool {
 	return false
 }
 
-func (channel *Channel) GetBaseURL() string {
-	if channel.BaseURL == nil {
-		return ""
-	}
-	return *channel.BaseURL
-}
-
 func (channel *Channel) GetModelMapping() map[string]string {
 	if channel.ModelMapping == nil || *channel.ModelMapping == "" || *channel.ModelMapping == "{}" {
 		return nil
@@ -197,9 +169,88 @@ func (channel *Channel) Insert() error {
 	return err
 }
 
-func (channel *Channel) Update() error {
+func (channel *Channel) Update(provided map[string]bool) error {
 	var err error
-	err = DB.Model(channel).Updates(channel).Error
+	// Build a map of mutable fields. A column is only written when the request
+	// body actually contained its JSON key (see `provided`). This keeps a
+	// partial payload like {id, status} from zeroing out untouched columns
+	// (name/models/group/config/balance/...) and lets `status` be updated.
+	// Pointer fields are still additionally gated on being non-nil so an
+	// omitted field is never persisted as NULL.
+	updates := map[string]interface{}{}
+	if provided["type"] {
+		updates["type"] = channel.Type
+	}
+	if provided["name"] {
+		updates["name"] = channel.Name
+	}
+	if provided["models"] {
+		updates["models"] = channel.Models
+	}
+	if provided["group"] {
+		updates["group"] = channel.Group
+	}
+	if provided["cooldown_seconds"] {
+		updates["cooldown_seconds"] = channel.CooldownSeconds
+	}
+	if provided["config"] {
+		updates["config"] = channel.Config
+	}
+	if provided["last_error"] {
+		updates["last_error"] = channel.LastError
+	}
+	if provided["last_error_time"] {
+		updates["last_error_time"] = channel.LastErrorTime
+	}
+	if provided["status"] {
+		updates["status"] = channel.Status
+	}
+	if provided["weight"] && channel.Weight != nil {
+		updates["weight"] = *channel.Weight
+	}
+	if provided["base_url"] && channel.BaseURL != nil {
+		updates["base_url"] = *channel.BaseURL
+	}
+	if provided["other"] && channel.Other != nil {
+		updates["other"] = *channel.Other
+	}
+	// Key is a non-pointer string. The list endpoint Omit("key") so the
+	// frontend never sees the real value; it always sends key="". Only persist
+	// it when the caller actually provided one.
+	if provided["key"] && channel.Key != "" {
+		updates["key"] = channel.Key
+	}
+	if provided["balance"] {
+		updates["balance"] = channel.Balance
+	}
+	if provided["balance_updated_time"] && channel.BalanceUpdatedTime != 0 {
+		updates["balance_updated_time"] = channel.BalanceUpdatedTime
+	}
+	if provided["model_mapping"] && channel.ModelMapping != nil {
+		updates["model_mapping"] = *channel.ModelMapping
+	}
+	if provided["priority"] && channel.Priority != nil {
+		updates["priority"] = *channel.Priority
+	}
+	if provided["system_prompt"] && channel.SystemPrompt != nil {
+		updates["system_prompt"] = *channel.SystemPrompt
+	}
+	if provided["max_concurrency"] && channel.MaxConcurrency != nil {
+		updates["max_concurrency"] = *channel.MaxConcurrency
+	}
+	if provided["rpm"] && channel.RPM != nil {
+		updates["rpm"] = *channel.RPM
+	}
+	if provided["is_fallback"] && channel.IsFallback != nil {
+		updates["is_fallback"] = *channel.IsFallback
+	}
+	if provided["fallback_priority"] && channel.FallbackPriority != nil {
+		updates["fallback_priority"] = *channel.FallbackPriority
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	err = DB.Model(channel).Updates(updates).Error
 	if err != nil {
 		return err
 	}
@@ -250,6 +301,44 @@ func (channel *Channel) LoadConfig() (ChannelConfig, error) {
 	return cfg, nil
 }
 
+func (channel *Channel) GetMaxConcurrency() int {
+	if channel.MaxConcurrency == nil {
+		return 0
+	}
+	return *channel.MaxConcurrency
+}
+
+func (channel *Channel) GetRPM() int {
+	if channel.RPM == nil {
+		return 0
+	}
+	return *channel.RPM
+}
+
+func (channel *Channel) GetIsFallback() bool {
+	if channel.IsFallback == nil {
+		return false
+	}
+	return *channel.IsFallback
+}
+
+func (channel *Channel) GetFallbackPriority() int64 {
+	if channel.FallbackPriority == nil {
+		return 0
+	}
+	return *channel.FallbackPriority
+}
+
+func UpdateChannelLastError(id int, errMsg string) {
+	err := DB.Model(&Channel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"last_error":      errMsg,
+		"last_error_time": helper.GetTimestamp(),
+	}).Error
+	if err != nil {
+		logger.SysError("failed to update channel last error: " + err.Error())
+	}
+}
+
 func UpdateChannelStatusById(id int, status int) {
 	err := UpdateAbilityStatus(id, status == ChannelStatusEnabled)
 	if err != nil {
@@ -284,15 +373,4 @@ func DeleteChannelByStatus(status int64) (int64, error) {
 func DeleteDisabledChannel() (int64, error) {
 	result := DB.Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Delete(&Channel{})
 	return result.RowsAffected, result.Error
-}
-
-// UpdateChannelLastError 记录渠道最近一次上游错误（移植自 one-api-pro）。
-func UpdateChannelLastError(id int, errMsg string) {
-	err := DB.Model(&Channel{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"last_error":      errMsg,
-		"last_error_time": helper.GetTimestamp(),
-	}).Error
-	if err != nil {
-		logger.SysError("failed to update channel last error: " + err.Error())
-	}
 }

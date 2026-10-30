@@ -1,10 +1,12 @@
 package model
 
 import (
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
+	"context"
 	"sync"
 	"time"
+
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/logger"
 )
 
 const (
@@ -59,6 +61,12 @@ func batchUpdate() {
 				err := increaseUserQuota(key, value)
 				if err != nil {
 					logger.SysError("failed to batch update user quota: " + err.Error())
+					continue
+				}
+				// DB write succeeded — refresh Redis so the cache does not lag
+				// behind users.quota after the batch flush.
+				if cerr := CacheUpdateUserQuota(context.Background(), key); cerr != nil {
+					logger.SysError("failed to refresh cache after batch user quota update: " + cerr.Error())
 				}
 			case BatchUpdateTypeTokenQuota:
 				err := increaseTokenQuota(key, value)

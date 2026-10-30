@@ -7,8 +7,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/helper"
 )
 
 const (
@@ -27,6 +27,7 @@ type Redemption struct {
 	CreatedTime  int64  `json:"created_time" gorm:"bigint"`
 	RedeemedTime int64  `json:"redeemed_time" gorm:"bigint"`
 	Count        int    `json:"count" gorm:"-:all"` // only for api request
+	UpdatedAt    int64  `json:"updated_at" gorm:"bigint;default:0"`
 }
 
 func GetAllRedemptions(startIdx int, num int) ([]*Redemption, error) {

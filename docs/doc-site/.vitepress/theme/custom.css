@@ -1,0 +1,710 @@
+/* doc-site/.vitepress/theme/custom.css
+   Modern visual layer for the One API Pro documentation site.
+   Brand: violet / indigo gradient on a clean, high-contrast surface. */
+
+:root {
+  --vp-c-brand-1: #6d5efc;
+  --vp-c-brand-2: #7c6bff;
+  --vp-c-brand-3: #8f7dff;
+  --vp-c-brand-soft: rgba(109, 94, 252, 0.14);
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f7f7fb;
+  --vp-c-bg-soft: #f4f4f9;
+  --vp-c-bg-elv: #ffffff;
+
+  /* Hero gradient text */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #6d5efc 10%, #a855f7 50%, #ec4899 90%);
+
+  /* Typography */
+  --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', Roboto,
+    Helvetica, Arial, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace,
+    Menlo, Consolas, monospace;
+
+  --vp-border-radius: 14px;
+}
+
+.dark {
+  --vp-c-bg: #0e0e16;
+  --vp-c-bg-alt: #12121c;
+  --vp-c-bg-soft: #171722;
+  --vp-c-bg-elv: #16161f;
+  --vp-c-brand-1: #9d8dff;
+  --vp-c-brand-2: #8a78ff;
+  --vp-c-brand-3: #7a66ff;
+  --vp-c-brand-soft: rgba(157, 141, 255, 0.16);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Base typography                                                         */
+/* ---------------------------------------------------------------------- */
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.VPDoc h1,
+.VPDoc h2,
+.VPDoc h3 {
+  letter-spacing: -0.01em;
+}
+
+.VPDoc h2 {
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 26px;
+  margin-top: 40px;
+}
+
+.VPDoc .content-container {
+  max-width: 780px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Navbar                                                                  */
+/* ---------------------------------------------------------------------- */
+/* Row 1 carries no distinct background: the bar blends with the page bg
+   and only row 2 draws a border. No white rectangle behind the logo. */
+.VPNavBar {
+  background-color: var(--vp-c-bg) !important;
+  backdrop-filter: saturate(180%) blur(12px);
+}
+
+.VPNavBar .title,
+.VPNavBar .content-body,
+.VPNavBarTitle,
+.VPNavBarTitle .title {
+  background-color: transparent !important;
+}
+
+/* Enlarged logo, native aspect ratio (logo.png is 1248x480, ratio ~ 13:5) */
+.VPNavBarTitle .logo,
+.VPNavBar .logo {
+  height: 36px;
+  width: auto;
+  max-width: none;
+  margin-right: 0;
+}
+
+/* "Docs" pill next to the logo (mirrors docs.openclaw.ai) */
+.VPNavBarTitle .op-docs-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 3px 9px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--vp-c-text-2);
+  background-color: transparent;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.VPNavBarTitle .op-docs-badge:hover {
+  color: var(--vp-c-brand-1);
+  border-color: var(--vp-c-brand-1);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Two-row navbar                                                          */
+/*   Row 1 (64px): logo · search · language · light/dark                   */
+/*   Row 2 (40px): category menu (full width, centered)                    */
+/* ---------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  :root {
+    /* 64px first row + 40px second row */
+    --vp-nav-height: 104px;
+    --op-nav-row-1: 64px;
+    --op-nav-row-2: 40px;
+  }
+
+  /* The whole nav bar is two rows tall; row 1 children stay at 64px. */
+  .VPNavBar .container,
+  .VPNavBar .wrapper {
+    height: var(--vp-nav-height) !important;
+  }
+
+  .VPNavBar .container {
+    align-items: flex-start !important;
+  }
+
+  .VPNavBar .content,
+  .VPNavBar .content-body {
+    height: var(--op-nav-row-1) !important;
+    /* Remove positioned ancestors so `.menu` anchors to `.VPNavBar` */
+    position: static !important;
+  }
+
+  .VPNavBar .title,
+  .VPNavBar .VPNavBarTitle .title {
+    height: var(--op-nav-row-1) !important;
+  }
+
+  /* Sidebar layout overrides the title to absolute — keep it on row 1. */
+  .VPNavBar.has-sidebar .title {
+    height: var(--op-nav-row-1) !important;
+
+    border-bottom: none!important;
+  }
+
+  /* Hide the theme's bottom divider (row 2 provides its own borders). */
+  .VPNavBar .divider {
+    display: none !important;
+  }
+
+  /* Row 2: category menu. Left-aligned, no top border, no top shadow,
+     and a low z-index so dropdowns from row 1 (language) float above it. */
+  .VPNavBarMenu.menu {
+    position: absolute !important;
+    top: var(--op-nav-row-1) !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 0;
+    display: flex !important;
+    justify-content: flex-start;
+    align-items: center;
+    height: var(--op-nav-row-2) !important;
+    max-width: calc(var(--vp-layout-max-width) - 64px);
+    margin: 0 auto !important;
+    padding: 0 32px;
+    border-top: none !important;
+    border-bottom: 1px solid var(--vp-c-divider);
+    background-color: var(--vp-c-bg);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .VPNavBarMenu.menu::-webkit-scrollbar {
+    display: none; /* Chromium / Safari */
+  }
+
+  /* Keep language switcher + light/dark toggle + GitHub visible on the top
+     row (VitePress hides them below 1280px and shows a "..." menu instead). */
+  .VPNavBar .social-links,
+  .VPNavBar .translations,
+  .VPNavBar .appearance {
+    display: flex !important;
+    align-items: center;
+  }
+
+  .VPNavBar .extra {
+    display: none !important;
+  }
+
+  /* Order the top-right controls: GitHub · language · light/dark. */
+  .VPNavBar .social-links {
+    order: 1;
+    margin-right: 0;
+  }
+
+  .VPNavBar .translations {
+    order: 2;
+  }
+
+  .VPNavBar .appearance {
+    order: 3;
+    margin-left: 8px;
+  }
+
+  /* Replace the theme's hairline separators with plain spacing. */
+  .VPNavBar .content-body > *::before {
+    display: none !important;
+  }
+
+  .VPNavBar .content-body {
+    gap: 6px;
+  }
+
+  /* Language dropdown must float above the row-2 category bar. */
+  .VPNavBarTranslations,
+  .VPNavBarExtra {
+    position: relative;
+    z-index: 3;
+  }
+
+  /* Centered, longer search box on row 1. */
+  .VPNavBarSearch.search {
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%);
+    width: min(560px, 42vw) !important;
+    z-index: 1;
+  }
+
+  /* `#local-search` is a flex item; without an explicit width it shrinks to
+     the button's intrinsic width. Force it to fill the search container. */
+  .VPNavBarSearch.search #local-search {
+    width: 100%;
+  }
+
+  .VPNavBarSearch.search .DocSearch-Button {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Compact menu links so all 13 categories fit on one line. */
+  .VPNavBarMenu.menu .VPNavBarMenuLink {
+    padding: 0 10px;
+    font-size: 14px;
+    line-height: var(--op-nav-row-2);
+    white-space: nowrap;
+  }
+
+  .VPNavBarMenu.menu .VPNavBarMenuGroup .text {
+    font-size: 14px;
+  }
+
+  /* Separators between the top-row controls look better without the menu. */
+  .VPNavBar .search + .translations::before,
+  .VPNavBar .search + .appearance::before,
+  .VPNavBar .translations + .appearance::before {
+    margin-right: 8px;
+    margin-left: 8px;
+  }
+}
+
+/* Sidebar */
+.VPSidebar {
+  border-right: 1px solid var(--vp-c-divider);
+}
+
+.VPSidebarItem.level-0 > .item > .text {
+  font-weight: 700;
+}
+
+.VPSidebarItem.is-active > .item .link > .text {
+  color: var(--vp-c-brand-1);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Home hero                                                               */
+/* ---------------------------------------------------------------------- */
+.VPHero {
+  padding: 88px 24px 56px;
+}
+
+.VPHero .container {
+  align-items: center;
+}
+
+.VPHero .name {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.VPHero .text {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  font-size: 38px;
+  line-height: 1.25;
+}
+
+.VPHero .tagline {
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--vp-c-text-2);
+  max-width: 640px;
+  margin-top: 14px;
+}
+
+.VPHero .actions {
+  margin-top: 32px;
+}
+
+.VPHero .actions .VPButton {
+  border-radius: 999px;
+  font-weight: 600;
+  padding: 0 22px;
+  height: 44px;
+  font-size: 15px;
+}
+
+.VPHero .actions .VPButton.brand {
+  box-shadow: 0 8px 24px -8px rgba(109, 94, 252, 0.7);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Home features (6 tiles, uniform style)                                 */
+/* ---------------------------------------------------------------------- */
+.VPFeatures {
+  padding: 16px 24px 48px;
+}
+
+.VPFeatures .container {
+  max-width: 960px;
+}
+
+.VPFeatures .VPFeature {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-elv);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.VPFeatures .VPFeature:hover {
+  transform: translateY(-3px);
+  border-color: var(--vp-c-brand-2);
+  box-shadow: 0 14px 34px -18px rgba(109, 94, 252, 0.55);
+}
+
+/* Uniform emoji icon — single background style across all 6 features */
+.VPFeature .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 12px;
+  background: var(--vp-c-brand-soft);
+  margin-bottom: 4px;
+}
+
+.VPFeature .title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--vp-c-text-1);
+}
+
+.VPFeature .details {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Custom category card grid (home page markdown)                          */
+/* ---------------------------------------------------------------------- */
+.home-section {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+.home-section h2 {
+  border-top: none;
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.home-section p.home-section-subtitle {
+  margin: 0 0 28px;
+  color: var(--vp-c-text-2);
+  font-size: 15px;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+@media (min-width: 720px) {
+  .category-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1100px) {
+  .category-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg-elv);
+  text-decoration: none !important;
+  transition: transform 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease;
+  height: 100%;
+}
+
+.category-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--vp-c-brand-2);
+  box-shadow: 0 14px 34px -18px rgba(109, 94, 252, 0.55);
+}
+
+.category-card .category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  line-height: 1;
+  border-radius: 10px;
+  background: var(--vp-c-brand-soft);
+  font-size: 20px;
+}
+
+.category-card h3 {
+  margin: 0;
+  border-top: none !important;
+  padding-top: 0 !important;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--vp-c-text-1);
+}
+
+.category-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Code blocks / tables                                                    */
+/* ---------------------------------------------------------------------- */
+div[class*='language-'] {
+  border-radius: 14px;
+  border: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.vp-doc tr:nth-child(2n) {
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc th {
+  background: var(--vp-c-bg-alt);
+  font-weight: 600;
+}
+
+.vp-doc :not(pre) > code {
+  border-radius: 6px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+}
+
+
+/* ---------------------------------------------------------------------- */
+/* Footer                                                                  */
+/* ---------------------------------------------------------------------- */
+/* VitePress hides the footer whenever a sidebar is present; docs pages all
+   have a sidebar, so force it back on. The footer spans the full viewport
+   width (including under the sidebar) with a single row: copyright left,
+   action links (with icons) right. */
+.VPFooter,
+.VPFooter.has-sidebar {
+  display: block !important;
+  /* Sit above the fixed sidebar so the bar truly spans the whole page and
+     the left-hand copyright is not hidden behind the sidebar. */
+  position: relative;
+  z-index: 65;
+  background-color: var(--vp-c-bg);
+  padding: 20px 32px !important;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.VPFooter .container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: none;
+  text-align: left;
+}
+
+/* DOM order is message (actions) then copyright; put copyright first. */
+.VPFooter .copyright {
+  order: 1;
+  color: var(--vp-c-text-3);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.VPFooter .message {
+  order: 2;
+  margin: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.VPFooter .op-footer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  white-space: nowrap;
+}
+
+.VPFooter .op-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vp-c-text-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none !important;
+  transition: color 0.2s ease;
+}
+
+.VPFooter .op-footer-link:hover {
+  color: var(--vp-c-brand-1);
+}
+
+.VPFooter .op-footer-icon {
+  flex-shrink: 0;
+  display: block;
+}
+
+/* Below the sidebar breakpoint, stack to avoid overflowing. */
+@media (max-width: 767px) {
+  .VPFooter .container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .VPFooter .message {
+    order: 1;
+    justify-content: flex-start;
+  }
+
+  .VPFooter .copyright {
+    order: 2;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Redirect page (/ -> quick start)                                        */
+/* ---------------------------------------------------------------------- */
+.op-redirect {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: min(72vh, 640px);
+  padding: 40px 24px;
+}
+
+.op-redirect-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 460px;
+  padding: 40px 36px 36px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 20px;
+  background: var(--vp-c-bg-elv);
+  box-shadow: 0 24px 60px -34px rgba(109, 94, 252, 0.5);
+  text-align: center;
+}
+
+.op-redirect-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.op-redirect-logo img {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+.op-redirect-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--vp-c-text-2);
+}
+
+.op-redirect-spinner {
+  width: 34px;
+  height: 34px;
+  margin-top: 4px;
+  border-radius: 50%;
+  border: 3px solid var(--vp-c-brand-soft);
+  border-top-color: var(--vp-c-brand-1);
+  animation: op-redirect-spin 0.8s linear infinite;
+}
+
+@keyframes op-redirect-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.op-redirect-title {
+  margin: 0;
+  border-top: none;
+  padding-top: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--vp-c-text-1);
+}
+
+.op-redirect-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+}
+
+.op-redirect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 22px;
+  height: 44px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, #6d5efc 0%, #a855f7 100%);
+  color: #ffffff !important;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none !important;
+  box-shadow: 0 10px 26px -12px rgba(109, 94, 252, 0.85);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.op-redirect-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px -14px rgba(109, 94, 252, 0.95);
+  filter: brightness(1.04);
+}
+
+.op-redirect-btn svg {
+  width: 16px;
+  height: 16px;
+}

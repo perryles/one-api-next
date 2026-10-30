@@ -4,18 +4,18 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/songquanpeng/one-api/common/render"
+	"github.com/perryles/one-api-next/common/render"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/common/image"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/relay/adaptor/openai"
+	"github.com/perryles/one-api-next/relay/schema"
 )
 
 func stopReasonClaude2OpenAI(reason *string) string {
@@ -286,8 +286,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 		response, meta := StreamResponseClaude2OpenAI(&claudeResponse)
 		if meta != nil {
-			usage.PromptTokens += meta.Usage.InputTokens
-			usage.CompletionTokens += meta.Usage.OutputTokens
+			// message_start 与 message_delta 携带的都是累计 usage，取 max 而非 += 累加，避免 input/cache 双计（见 #13）。
+			MergeClaudeUsage(&usage, meta.Usage)
 			if len(meta.Id) > 0 { // only message_start has an id, otherwise it's a finish_reason event.
 				modelName = meta.Model
 				id = fmt.Sprintf("chatcmpl-%s", meta.Id)
@@ -362,11 +362,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	}
 	fullTextResponse := ResponseClaude2OpenAI(&claudeResponse)
 	fullTextResponse.Model = modelName
-	usage := model.Usage{
-		PromptTokens:     claudeResponse.Usage.InputTokens,
-		CompletionTokens: claudeResponse.Usage.OutputTokens,
-		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
-	}
+	usage := ClaudeUsage2OpenAI(claudeResponse.Usage)
 	fullTextResponse.Usage = usage
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {

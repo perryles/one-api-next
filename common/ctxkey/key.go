@@ -7,6 +7,7 @@ const (
 	Role              = "role"
 	Status            = "status"
 	Channel           = "channel"
+	ChannelID         = "channel_id_str"
 	ChannelId         = "channel_id"
 	SpecificChannelId = "specific_channel_id"
 	RequestModel      = "request_model"
@@ -21,5 +22,9 @@ const (
 	AvailableModels   = "available_models"
 	KeyRequestBody    = "key_request_body"
 	SystemPrompt      = "system_prompt"
-	SessionKey        = "session_key" // channelrouter 粘性会话（移植自 one-api-pro）
+	PlanId            = "plan_id"
+	PlanLimits        = "plan_limits"
+	BillingType       = "billing_type"
+	SessionKey        = "session_key"
+	ConcurrencyAcquired = "concurrency_acquired"
 )

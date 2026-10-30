@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/controller/auth"
-	"github.com/songquanpeng/one-api/middleware"
+	"github.com/perryles/one-api-next/controller"
+	"github.com/perryles/one-api-next/controller/admin"
+	"github.com/perryles/one-api-next/controller/auth"
+	"github.com/perryles/one-api-next/middleware"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
@@ -48,6 +49,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.POST("/topup", controller.TopUp)
 				selfRoute.GET("/available_models", controller.GetUserAvailableModels)
+				selfRoute.GET("/subscription", controller.GetUserSubscriptionInfo)
 			}
 
 			adminRoute := userRoute.Group("/")
@@ -116,6 +118,131 @@ func SetApiRouter(router *gin.Engine) {
 		groupRoute.Use(middleware.AdminAuth())
 		{
 			groupRoute.GET("/", controller.GetGroups)
+		}
+		modelPriceRoute := apiRouter.Group("/model_price")
+		modelPriceRoute.Use(middleware.RootAuth())
+		{
+			modelPriceRoute.GET("/", controller.GetAllModelPrices)
+			modelPriceRoute.POST("/", controller.AddModelPrice)
+			modelPriceRoute.PUT("/", controller.UpdateModelPrice)
+			modelPriceRoute.DELETE("/:id", controller.DeleteModelPrice)
+		}
+		// 模型下拉候选（前端渠道编辑弹窗用）：AdminAuth 即可访问，只返 model_name。
+		// 挂在 apiRouter 上而非 modelPriceRoute 内，避免被 RootAuth 拦截。
+		apiRouter.GET("/model_price/options", middleware.AdminAuth(), controller.ListModelPriceOptions)
+		groupPriceRoute := apiRouter.Group("/group_price")
+		groupPriceRoute.Use(middleware.RootAuth())
+		{
+			groupPriceRoute.GET("/", controller.GetAllGroupPrices)
+			groupPriceRoute.POST("/", controller.AddGroupPrice)
+			groupPriceRoute.PUT("/", controller.UpdateGroupPrice)
+			groupPriceRoute.DELETE("/:id", controller.DeleteGroupPrice)
+		}
+		planRoute := apiRouter.Group("/plan")
+		{
+			// Public (user-facing) endpoints — no auth.
+			planRoute.GET("/list", controller.GetPublicPlans)
+			planRoute.GET("/detail/:id", controller.GetPublicPlanDetail)
+			// Admin endpoints
+			planRoute.GET("/", middleware.AdminAuth(), controller.GetAllPlans)
+			planRoute.GET("/search", middleware.AdminAuth(), controller.SearchPlans)
+			planRoute.GET("/:id", middleware.AdminAuth(), controller.GetPlan)
+			planRoute.POST("/", middleware.RootAuth(), controller.AddPlan)
+			planRoute.PUT("/", middleware.RootAuth(), controller.UpdatePlan)
+			planRoute.DELETE("/:id", middleware.RootAuth(), controller.DeletePlan)
+		}
+		// /api/plan/current — authenticated user reads own active plan.
+		apiRouter.GET("/plan/current", middleware.UserAuth(), controller.GetCurrentPlan)
+
+		// Orders: /api/order/plan (user self-service) + /api/order/self/:id (user)
+		// + /api/order (admin).
+		orderSelfRoute := apiRouter.Group("/order/self")
+		orderSelfRoute.Use(middleware.UserAuth())
+		{
+			orderSelfRoute.GET("", controller.GetMyOrders)
+			orderSelfRoute.GET("/", controller.GetMyOrders)
+			orderSelfRoute.GET("/:id", controller.GetMyOrder)
+			orderSelfRoute.POST("/:id/cancel", controller.CancelMyOrder)
+			orderSelfRoute.POST("/:id/pay", controller.PayMyOrder)
+		}
+		apiRouter.POST("/order/plan", middleware.UserAuth(), controller.CreatePlanOrder)
+		orderAdminRoute := apiRouter.Group("/order")
+		{
+			orderAdminRoute.GET("", middleware.AdminAuth(), controller.GetAllOrders)
+			orderAdminRoute.GET("/", middleware.AdminAuth(), controller.GetAllOrders)
+			orderAdminRoute.GET("/search", middleware.AdminAuth(), controller.SearchOrders)
+			orderAdminRoute.GET("/:id", middleware.AdminAuth(), controller.GetOrder)
+			orderAdminRoute.PUT("/:id", middleware.AdminAuth(), controller.MarkOrderPaid)
+			orderAdminRoute.DELETE("/:id", middleware.RootAuth(), controller.DeleteOrder)
+		}
+
+		// Payment callbacks (no auth; signature-verified) + admin mock.
+		apiRouter.POST("/payment/wechat/notify", controller.WechatNotify)
+		apiRouter.POST("/payment/alipay/notify", controller.AlipayNotify)
+		apiRouter.POST("/payment/mock/notify", middleware.RootAuth(), controller.MockPay)
+		// Public payment-status endpoint so user-facing pages can decide
+		// whether to show the purchase UI.
+		apiRouter.GET("/payment/status", controller.GetPaymentStatus)
+
+		// 在线充值（topup）：用户自助下单 + 管理员设置
+		// 版本 v0.0.10  2026-09-06  新增
+		topupSelfRoute := apiRouter.Group("/topup")
+		topupSelfRoute.Use(middleware.UserAuth())
+		{
+			topupSelfRoute.POST("/order", controller.CreateTopupOrder)
+		}
+		apiRouter.GET("/setting/topup", middleware.RootAuth(), controller.GetTopupSettings)
+		apiRouter.PUT("/setting/topup", middleware.RootAuth(), controller.PutTopupSettings)
+
+		// Settings: payment + plan-operations.
+		settingRoute := apiRouter.Group("/setting")
+		{
+			settingRoute.GET("/payment", middleware.RootAuth(), controller.GetPaymentSettings)
+			settingRoute.PUT("/payment/:method", middleware.RootAuth(), controller.PutPaymentMethod)
+			settingRoute.GET("/plan", middleware.RootAuth(), controller.GetPlanSettings)
+			settingRoute.PUT("/plan", middleware.RootAuth(), controller.PutPlanSettings)
+		}
+
+		subscriptionRoute := apiRouter.Group("/subscription")
+		{
+			subscriptionRoute.GET("/self", middleware.UserAuth(), controller.GetUserSubscriptions)
+			subscriptionRoute.GET("/", middleware.AdminAuth(), controller.GetAllSubscriptions)
+			subscriptionRoute.GET("/search", middleware.AdminAuth(), controller.SearchSubscriptions)
+			subscriptionRoute.GET("/:id", middleware.AdminAuth(), controller.GetSubscriptionDetail)
+			subscriptionRoute.GET("/:id/usage", middleware.UserAuth(), controller.GetSubscriptionUsage)
+			subscriptionRoute.POST("/", middleware.AdminAuth(), controller.AddSubscription)
+			subscriptionRoute.PUT("/", middleware.AdminAuth(), controller.UpdateSubscription)
+			subscriptionRoute.DELETE("/:id", middleware.AdminAuth(), controller.DeleteSubscription)
+		}
+
+		// Admin-only 诊断端点。用于排查 plan_id 显示 0 等问题。
+		// Admin-only diagnostics. Used to debug "plan_id shows 0" and similar.
+		// 版本: v0.0.13
+		diagRoute := apiRouter.Group("/diag")
+		diagRoute.Use(middleware.AdminAuth())
+		{
+			diagRoute.GET("/subscriptions", controller.DiagSubscriptions)
+		}
+		// 管理员仪表盘：聚合 KPI + 排行榜，仅管理员可见。
+		// Admin operations dashboard: aggregate KPIs + leaderboard, admin only.
+		// 版本: v0.0.16
+		adminDashRoute := apiRouter.Group("/admin/dashboard")
+		adminDashRoute.Use(middleware.AdminAuth())
+		{
+			adminDashRoute.GET("/overview", admin.GetOverview)
+			adminDashRoute.GET("/charts", admin.GetCharts)
+			adminDashRoute.GET("/top-users", admin.GetTopUsers)
+		}
+		clusterNodeRoute := apiRouter.Group("/cluster_node")
+		clusterNodeRoute.Use(middleware.RootAuth())
+		{
+			clusterNodeRoute.GET("/", controller.GetAllClusterNodes)
+			clusterNodeRoute.GET("/:id", controller.GetClusterNode)
+			clusterNodeRoute.POST("/", controller.AddClusterNode)
+			clusterNodeRoute.PUT("/", controller.UpdateClusterNode)
+			clusterNodeRoute.DELETE("/:id", controller.DeleteClusterNode)
+			clusterNodeRoute.POST("/:id/enable", controller.EnableClusterNode)
+			clusterNodeRoute.GET("/ping/:id", controller.PingClusterNode)
 		}
 	}
 }

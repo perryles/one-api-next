@@ -3,11 +3,14 @@ package common
 import (
 	"flag"
 	"fmt"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
+	"path/filepath"
+
 	"log"
 	"os"
-	"path/filepath"
+
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/joho/godotenv"
 )
 
 var (
@@ -15,16 +18,19 @@ var (
 	PrintVersion = flag.Bool("version", false, "print version and exit")
 	PrintHelp    = flag.Bool("help", false, "print help and exit")
 	LogDir       = flag.String("log-dir", "./logs", "specify the log directory")
+	EnvFile      = flag.String("env", "", "specify the .env file path (supports relative path)")
 )
 
 func printHelp() {
-	fmt.Println("One API " + Version + " - All in one API service for OpenAI API.")
-	fmt.Println("Copyright (C) 2023 JustSong. All rights reserved.")
-	fmt.Println("GitHub: https://github.com/songquanpeng/one-api")
-	fmt.Println("Usage: one-api [--port <port>] [--log-dir <log directory>] [--version] [--help]")
+	fmt.Println("One Api Pro " + Version + " - All in one API service for OpenAI API.")
+	fmt.Println("Copyright (C) 2026 Leon PanPan. All rights reserved.")
+	fmt.Println("GitHub: https://github.com/perryles/one-api-next")
+	fmt.Println("Usage: one-api-pro [--port <port>] [--log-dir <log directory>] [--env <env file path>] [--version] [--help]")
 }
 
 func Init() {
+	loadVersionFromFile()
+
 	flag.Parse()
 
 	if *PrintVersion {
@@ -36,6 +42,8 @@ func Init() {
 		printHelp()
 		os.Exit(0)
 	}
+
+	loadEnvFile()
 
 	if os.Getenv("SESSION_SECRET") != "" {
 		if os.Getenv("SESSION_SECRET") == "random_string" {
@@ -60,5 +68,32 @@ func Init() {
 			}
 		}
 		logger.LogDir = *LogDir
+	}
+}
+
+func loadEnvFile() {
+	var envPath string
+	if *EnvFile != "" {
+		absPath, err := filepath.Abs(*EnvFile)
+		if err != nil {
+			log.Fatalf("failed to resolve env file path '%s': %s", *EnvFile, err.Error())
+		}
+		envPath = absPath
+	} else {
+		envPath = ".env"
+	}
+
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		if *EnvFile != "" {
+			log.Fatalf("specified env file not found: %s", envPath)
+		}
+		return
+	}
+
+	if err := godotenv.Load(envPath); err != nil {
+		if *EnvFile != "" {
+			log.Fatalf("failed to load env file '%s': %s", envPath, err.Error())
+		}
+		logger.SysError(fmt.Sprintf("failed to load .env file: %s", err.Error()))
 	}
 }

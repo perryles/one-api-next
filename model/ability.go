@@ -7,8 +7,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/utils"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/utils"
 )
 
 type Ability struct {
@@ -17,6 +17,8 @@ type Ability struct {
 	ChannelId int    `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
 	Enabled   bool   `json:"enabled"`
 	Priority  *int64 `json:"priority" gorm:"bigint;default:0;index"`
+	CreatedAt int64  `json:"created_at" gorm:"bigint;default:0"`
+	UpdatedAt int64  `json:"updated_at" gorm:"bigint;default:0"`
 }
 
 func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
@@ -71,7 +73,21 @@ func (channel *Channel) AddAbilities() error {
 }
 
 func (channel *Channel) DeleteAbilities() error {
-	return DB.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
+	// 先查询再删除，确保 GORM 回调能取到正确的复合主键字段
+	var abilities []Ability
+	if err := DB.Where("channel_id = ?", channel.Id).Find(&abilities).Error; err != nil {
+		return err
+	}
+	if len(abilities) == 0 {
+		return nil
+	}
+	// 逐条删除以触发 cluster 同步事件
+	for i := range abilities {
+		if err := DB.Delete(&abilities[i]).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UpdateAbilities updates abilities of this channel.

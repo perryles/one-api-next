@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/songquanpeng/one-api/common/render"
+	"github.com/perryles/one-api-next/common/render"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/conv"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/conv"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/relay/schema"
+	"github.com/perryles/one-api-next/relay/relaymode"
 )
 
 const (

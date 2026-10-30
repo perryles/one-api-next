@@ -1,69 +1,59 @@
 package relay
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/aiproxy"
-	"github.com/songquanpeng/one-api/relay/adaptor/ali"
-	"github.com/songquanpeng/one-api/relay/adaptor/anthropic"
-	"github.com/songquanpeng/one-api/relay/adaptor/aws"
-	"github.com/songquanpeng/one-api/relay/adaptor/baidu"
-	"github.com/songquanpeng/one-api/relay/adaptor/cloudflare"
-	"github.com/songquanpeng/one-api/relay/adaptor/cohere"
-	"github.com/songquanpeng/one-api/relay/adaptor/coze"
-	"github.com/songquanpeng/one-api/relay/adaptor/deepl"
-	"github.com/songquanpeng/one-api/relay/adaptor/gemini"
-	"github.com/songquanpeng/one-api/relay/adaptor/ollama"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/adaptor/palm"
-	"github.com/songquanpeng/one-api/relay/adaptor/proxy"
-	"github.com/songquanpeng/one-api/relay/adaptor/replicate"
-	"github.com/songquanpeng/one-api/relay/adaptor/tencent"
-	"github.com/songquanpeng/one-api/relay/adaptor/vertexai"
-	"github.com/songquanpeng/one-api/relay/adaptor/xunfei"
-	"github.com/songquanpeng/one-api/relay/adaptor/zhipu"
-	"github.com/songquanpeng/one-api/relay/apitype"
+	"github.com/perryles/one-api-next/relay/adaptor"
+	"github.com/perryles/one-api-next/relay/registry"
+
+	// Register all adaptors via init()
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/ai360"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/aiproxy"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/ali"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/alibailian"
+	_ "github.com/perryles/one-api-next/relay/adaptor/anthropic"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/aws"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/azure"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/baichuan"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/baidu"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/baiduv2"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/cloudflare"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/cohere"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/coze"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/deepl"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/deepseek"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/doubao"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/gemini"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/geminiv2"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/groq"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/lingyiwanwu"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/minimax"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/mistral"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/moonshot"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/novita"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/ollama"
+	_ "github.com/perryles/one-api-next/relay/adaptor/openai"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/openrouter"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/palm"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/proxy"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/replicate"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/siliconflow"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/stepfun"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/tencent"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/togetherai"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/vertexai"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/xai"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/xunfei"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/xunfeiv2"
+	_ "github.com/perryles/one-api-next/relay/adaptor/provider/zhipu"
 )
 
+func GetAdaptorByChannel(channelType int) adaptor.Adaptor {
+	return registry.GetAdaptorByLegacyType(channelType)
+}
+
+func GetAdaptorByChannelID(channelID string) adaptor.Adaptor {
+	return registry.GetAdaptor(channelID)
+}
+
 func GetAdaptor(apiType int) adaptor.Adaptor {
-	switch apiType {
-	case apitype.AIProxyLibrary:
-		return &aiproxy.Adaptor{}
-	case apitype.Ali:
-		return &ali.Adaptor{}
-	case apitype.Anthropic:
-		return &anthropic.Adaptor{}
-	case apitype.AwsClaude:
-		return &aws.Adaptor{}
-	case apitype.Baidu:
-		return &baidu.Adaptor{}
-	case apitype.Gemini:
-		return &gemini.Adaptor{}
-	case apitype.OpenAI:
-		return &openai.Adaptor{}
-	case apitype.PaLM:
-		return &palm.Adaptor{}
-	case apitype.Tencent:
-		return &tencent.Adaptor{}
-	case apitype.Xunfei:
-		return &xunfei.Adaptor{}
-	case apitype.Zhipu:
-		return &zhipu.Adaptor{}
-	case apitype.Ollama:
-		return &ollama.Adaptor{}
-	case apitype.Coze:
-		return &coze.Adaptor{}
-	case apitype.Cohere:
-		return &cohere.Adaptor{}
-	case apitype.Cloudflare:
-		return &cloudflare.Adaptor{}
-	case apitype.DeepL:
-		return &deepl.Adaptor{}
-	case apitype.VertexAI:
-		return &vertexai.Adaptor{}
-	case apitype.Proxy:
-		return &proxy.Adaptor{}
-	case apitype.Replicate:
-		return &replicate.Adaptor{}
-	}
-	return nil
+	return registry.GetAdaptorByLegacyType(apiType)
 }

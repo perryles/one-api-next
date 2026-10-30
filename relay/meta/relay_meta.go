@@ -6,15 +6,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/model"
+	"github.com/perryles/one-api-next/relay/relaymode"
 )
 
 type Meta struct {
 	Mode         int
 	ChannelType  int
+	ChannelID    string
 	ChannelId    int
 	TokenId      int
 	TokenName    string
@@ -24,7 +24,6 @@ type Meta struct {
 	// BaseURL is the proxy url set in the channel config
 	BaseURL  string
 	APIKey   string
-	APIType  int
 	Config   model.ChannelConfig
 	IsStream bool
 	// OriginModelName is the model name from the raw user request
@@ -35,6 +34,9 @@ type Meta struct {
 	PromptTokens       int // only for DoResponse
 	ForcedSystemPrompt string
 	StartTime          time.Time
+	PlanId              int    // UserPlan.Id if using subscription, 0 if using quota
+	BillingType         string // "request" or "token"
+	SessionKey          string
 }
 
 func GetByContext(c *gin.Context) *Meta {
@@ -53,14 +55,14 @@ func GetByContext(c *gin.Context) *Meta {
 		RequestURLPath:     c.Request.URL.String(),
 		ForcedSystemPrompt: c.GetString(ctxkey.SystemPrompt),
 		StartTime:          time.Now(),
+		PlanId:            c.GetInt(ctxkey.PlanId),
+		BillingType:       c.GetString(ctxkey.BillingType),
+		SessionKey:        c.GetString(ctxkey.SessionKey),
 	}
 	cfg, ok := c.Get(ctxkey.Config)
 	if ok {
 		meta.Config = cfg.(model.ChannelConfig)
 	}
-	if meta.BaseURL == "" {
-		meta.BaseURL = channeltype.ChannelBaseURLs[meta.ChannelType]
-	}
-	meta.APIType = channeltype.ToAPIType(meta.ChannelType)
+	meta.ChannelID = c.GetString(ctxkey.ChannelID)
 	return &meta
 }

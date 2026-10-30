@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/random"
 	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/common/random"
 )
 
 var (
@@ -85,6 +86,33 @@ func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err erro
 	return
 }
 
+// userQuotaLowWaterMark is the cache freshness threshold for user_quota:<id>.
+// When the cached value drops to or below this mark, the next read will refresh
+// from DB to avoid serving a stale value that no longer reflects users.quota.
+//
+// Why 50_000 (instead of config.PreConsumedQuota = 500):
+//   - Single pre-consume for high-price models (e.g. minimax-m3 ¥8.40/1M tokens)
+//     can be ~80,000 quota, far above 500.
+//   - With the old threshold, the cache could drift into the dead zone
+//     [501, 80_000) — large enough to look "has quota" but too small to cover
+//     the next pre-consume — and stay there indefinitely until it dropped
+//     further to ≤500, producing spurious 403 "insufficient_user_quota".
+//   - 50_000 keeps the dead zone narrow (~30K wide vs ~80K before) and well
+//     below typical single-request pre-consume amounts.
+//
+// userQuotaLowWaterMark 是 user_quota:<id> 的缓存新鲜度阈值。
+// 缓存值跌至或低于该阈值时，下次读取会回源 DB 刷新，避免返回已偏离
+// users.quota 的陈旧值。
+//
+// 设为 50_000（而非 config.PreConsumedQuota = 500）的原因：
+//   - 高单价模型（如 minimax-m3 ¥8.40/百万 tokens）单次预扣可达 ~80,000 quota，
+//     远超 500。
+//   - 旧阈值下，缓存可能漂移到 [501, 80_000) 死区——看似还有钱但已不够
+//     下一次预扣——并长期停留，直至进一步跌至 ≤500 才触发刷新，造成
+//     误报 403 insufficient_user_quota。
+//   - 50_000 让死区收窄到 ~30K（原来 ~80K），且远低于典型单次预扣。
+const userQuotaLowWaterMark int64 = 50_000
+
 func CacheGetUserQuota(ctx context.Context, id int) (quota int64, err error) {
 	if !common.RedisEnabled {
 		return GetUserQuota(id)
@@ -97,7 +125,7 @@ func CacheGetUserQuota(ctx context.Context, id int) (quota int64, err error) {
 	if err != nil {
 		return 0, nil
 	}
-	if quota <= config.PreConsumedQuota { // when user's quota is less than pre-consumed quota, we need to fetch from db
+	if quota <= userQuotaLowWaterMark { // when user's cached quota is at or below the low-water mark, we need to fetch from db
 		logger.Infof(ctx, "user %d's cached quota is too low: %d, refreshing from db", quota, id)
 		return fetchAndUpdateUserQuota(ctx, id)
 	}
@@ -121,6 +149,24 @@ func CacheDecreaseUserQuota(id int, quota int64) error {
 		return nil
 	}
 	err := common.RedisDecrease(fmt.Sprintf("user_quota:%d", id), int64(quota))
+	return err
+}
+
+// CacheIncreaseUserQuota rolls back a previous CacheDecreaseUserQuota when the
+// matching DB-side write fails (e.g. PreConsumeTokenQuota rejected the token).
+// Without this rollback, the Redis cache would drift further from users.quota
+// every time the post-decrease DB write fails, eventually landing in the dead
+// zone [lowWaterMark, preConsumedQuota) and causing spurious 403.
+//
+// CacheIncreaseUserQuota 在对应的 DB 写入失败（如 PreConsumeTokenQuota 拒绝该
+// token）时，回滚此前 CacheDecreaseUserQuota 的扣减。若不回滚，每次 DB 写入
+// 失败都会让 Redis 缓存进一步偏离 users.quota，最终落入死区
+// [lowWaterMark, preConsumedQuota)，导致误报 403。
+func CacheIncreaseUserQuota(id int, quota int64) error {
+	if !common.RedisEnabled {
+		return nil
+	}
+	err := common.RedisIncrease(fmt.Sprintf("user_quota:%d", id), int64(quota))
 	return err
 }
 
@@ -168,8 +214,8 @@ func CacheGetGroupModels(ctx context.Context, group string) ([]string, error) {
 }
 
 var group2model2channels map[string]map[string][]*Channel
-var channelId2channel map[int]*Channel
 var channelSyncLock sync.RWMutex
+var channelId2channel map[int]*Channel
 
 func InitChannelCache() {
 	newChannelId2channel := make(map[int]*Channel)
@@ -256,10 +302,6 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 	return channels[idx], nil
 }
 
-// ==== channelrouter 支撑查询（移植自 one-api-pro，见 docs/UPSTREAM.md）====
-
-// GetChannelCandidates 返回分组+模型下的全部启用渠道（按优先级降序），
-// 供 channelrouter 做过滤/选择；内存缓存未启用时直接查库。
 func GetChannelCandidates(group string, modelName string) []*Channel {
 	if !config.MemoryCacheEnabled {
 		var channels []*Channel
@@ -287,7 +329,6 @@ func GetChannelCandidates(group string, modelName string) []*Channel {
 	return result
 }
 
-// CacheGetChannelById 从内存缓存按 ID 取渠道（未启用缓存时返回 false）。
 func CacheGetChannelById(channelId int) (*Channel, bool) {
 	if !config.MemoryCacheEnabled {
 		return nil, false
@@ -298,9 +339,13 @@ func CacheGetChannelById(channelId int) (*Channel, bool) {
 	return ch, ok
 }
 
-// GetFallbackChannel 返回指定分组下启用的兜底渠道（is_fallback = true）。
-// 同优先级随机挑选；这里刻意不检查冷却/并发/RPM —— 由调用方在选中后经
-// channelrouter 获取并发额度，兜底失败则直接把错误返回给客户端。
+// GetFallbackChannel returns an enabled fallback channel for the given user
+// group. It returns nil if no fallback channel is configured for that group.
+// Among fallback channels with the same priority, the pick is random.
+//
+// Note: cooldown / concurrency / RPM are intentionally NOT checked here — the
+// caller (controller/relay.go) acquires concurrency via channelrouter after
+// picking, and a failed fallback call simply returns the error to the client.
 func GetFallbackChannel(group string) (*Channel, error) {
 	if group == "" {
 		return nil, errors.New("group is empty")
@@ -315,17 +360,27 @@ func GetFallbackChannel(group string) (*Channel, error) {
 		Order("fallback_priority DESC, id DESC").
 		Find(&channels).Error
 	if err != nil {
+		logger.SysError("failed to query fallback channels: " + err.Error())
 		return nil, err
 	}
 	if len(channels) == 0 {
 		return nil, nil
 	}
-	maxPriority := channels[0].GetFallbackPriority()
-	samePriority := make([]*Channel, 0, len(channels))
+
+	// Walk the priority tier; skip channels that have no models configured.
+	highest := channels[0].GetFallbackPriority()
+	tier := make([]*Channel, 0, len(channels))
 	for _, ch := range channels {
-		if ch.GetFallbackPriority() == maxPriority {
-			samePriority = append(samePriority, ch)
+		if ch.GetFallbackPriority() != highest {
+			break
 		}
+		if strings.TrimSpace(ch.Models) == "" {
+			continue
+		}
+		tier = append(tier, ch)
 	}
-	return samePriority[rand.Intn(len(samePriority))], nil
+	if len(tier) == 0 {
+		return nil, nil
+	}
+	return tier[rand.Intn(len(tier))], nil
 }

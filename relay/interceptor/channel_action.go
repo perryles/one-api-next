@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/songquanpeng/one-api/channelrouter"
-	"github.com/songquanpeng/one-api/common/config"
-	dbmodel "github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/monitor"
-	"github.com/songquanpeng/one-api/relay/errcode"
+	"github.com/perryles/one-api-next/channelrouter"
+	"github.com/perryles/one-api-next/common/config"
+	dbmodel "github.com/perryles/one-api-next/model"
+	"github.com/perryles/one-api-next/monitor"
+	"github.com/perryles/one-api-next/relay/errcode"
 )
 
 type ChannelActionHandler struct {

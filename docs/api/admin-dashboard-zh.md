@@ -1,0 +1,116 @@
+---
+title: 运营仪表盘 API
+description: "/api/admin/dashboard/* 端点。"
+category: api
+order: 15
+---
+# 运营仪表盘 API
+
+`/api/admin/dashboard/*` 提供给管理后台首页使用的全站聚合数据。所有端点均要求 **Admin** 权限，且 `success: false` 时返回 `{success, message}`。
+
+## 端点一览
+
+| 接口 | 方法 | 权限 | 说明 |
+|------|------|------|------|
+| `/api/admin/dashboard/overview` | GET | Admin | KPI 总览（用户/资源/额度/收入） |
+| `/api/admin/dashboard/charts` | GET | Admin | 站点级按日 × 模型聚合（`[]LogStatistic`） |
+| `/api/admin/dashboard/top-users` | GET | Admin | 活跃用户排行榜 |
+
+## 1. KPI 总览
+
+**接口：** `GET /api/admin/dashboard/overview`
+
+**权限：** Admin
+
+**查询参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| range | string | 时间窗口，可选 `today` / `7d` / `30d` / `all`，默认 `7d` |
+
+**返回示例：**
+
+```
+
+**字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| users.total | int64 | 用户总数（含禁用/已删除） |
+| users.enabled | int64 | 启用中的用户数 |
+| users.disabled | int64 | 手动禁用的用户数 |
+| users.deleted | int64 | 软删除的用户数 |
+| users.new_today| int64 | 今日 / 近 7 日 / 近 30 日新增 |
+| users.active_7d | int64 | 近 7 日有消费日志且 `request_count > 0` 的用户数 |
+| tokens.total| int64 | 令牌总数 / 启用数 |
+| channels.total| int64 | 渠道总数 / 启用数 |
+| plans.total| int64 | 套餐总数 / 上架数 |
+| redemptions.total| int64 | 兑换码总数 / 已使用 / 未使用 |
+| subscriptions.total| int64 | 用户订阅总数 / 激活中 / 已过期 |
+| quota.today| int64 | 各窗口消费日志的 quota 合计 |
+| revenue.total| float64 | 收入合计 / 充值 / 套餐（单位：元） |
+| revenue.refund | float64 | 退款合计（单位：元） |
+| range | string | 实际生效的窗口名 |
+| generated_at | int64 | 服务端生成时间戳 |
+
+> 收入按 `orders.pay_time` 在 `range` 区间内过滤 `status=1`（已支付）和 `status=3`（已退款）的金额。
+
+## 2. 全站图表数据
+
+**接口：** `GET /api/admin/dashboard/charts`
+
+**权限：** Admin
+
+**查询参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| range | string | 时间窗口，可选 `today` / `7d` / `30d` / `all`，默认 `7d`；`all` 收敛为最近 30 天 |
+
+**返回示例：**
+
+```
+
+**字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| day | string | 日期（YYYY-MM-DD，UTC 截断到天） |
+| model_name | string | 模型名 |
+| request_count | int | 当天该模型的请求数 |
+| quota | number | 当天该模型消费金额合计（元） |
+| prompt_tokens | int | 输入 Token 合计 |
+| completion_tokens | int | 输出 Token 合计 |
+
+> 返回结构与 `model.SearchLogsByDayAndModel`（即 `GET /api/user/dashboard`）完全一致，前端可以复用同一套图表绘制逻辑。
+
+## 3. 活跃用户排行榜
+
+**接口：** `GET /api/admin/dashboard/top-users`
+
+**权限：** Admin
+
+**查询参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| range | string | 时间窗口，可选 `today` / `7d` / `30d` / `all`，默认 `7d` |
+| limit | int | 返回行数，1-200，默认 20 |
+
+**返回示例：**
+
+```
+
+**字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int | 用户 ID |
+| username | string | 用户名 |
+| email | string | 邮箱 |
+| request_count | int64 | 窗口内的请求数 |
+| quota | number | 窗口内消费金额合计（元） |
+| balance | int64 | 当前账户剩余 quota |
+| current_plan_name | string | 当前激活的最早到期订阅的套餐名 |
+
+> 排序：先按 `request_count` 降序，再按窗口内消费 quota 降序。仅统计 `users.status != deleted` 且 `users.request_count > 0` 的用户。

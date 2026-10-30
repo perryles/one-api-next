@@ -7,12 +7,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/channelrouter"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/perryles/one-api-next/channelrouter"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/model"
+	"github.com/perryles/one-api-next/relay/registry"
 )
 
 type ModelRequest struct {
@@ -43,7 +43,6 @@ func Distribute() func(c *gin.Context) {
 				abortWithMessage(c, http.StatusForbidden, "该渠道已被禁用")
 				return
 			}
-			// one-api-pro 移植：指定渠道也要校验分组与模型权限
 			if !channel.ContainsGroup(userGroup) {
 				abortWithMessage(c, http.StatusForbidden, "当前分组无权使用该渠道")
 				return
@@ -68,37 +67,70 @@ func Distribute() func(c *gin.Context) {
 			}
 		}
 		logger.Debugf(ctx, "user id %d, user group: %s, request model: %s, using channel #%d", userId, userGroup, requestModel, channel.Id)
+
+		sessionKey := ""
+		if config.ChannelStickySessionEnabled && userId > 0 && requestModel != "" {
+			sessionKey = channelrouter.MakeSessionKey(userId, requestModel)
+			c.Set(ctxkey.SessionKey, sessionKey)
+		}
+
+		if config.ChannelConcurrencyEnabled && channel.GetMaxConcurrency() > 0 {
+			if !channelrouter.DefaultRouter.TryAcquireConcurrency(channel.Id, channel.GetMaxConcurrency()) {
+				logger.Debugf(ctx, "channel #%d at concurrency limit (%d), trying alternate", channel.Id, channel.GetMaxConcurrency())
+				altChannel, altErr := selectChannelViaRouter(c, userGroup, requestModel, userId, false)
+				if altErr == nil && altChannel.Id != channel.Id {
+					channel = altChannel
+				}
+			}
+			c.Set(ctxkey.ConcurrencyAcquired, true)
+		}
+
 		SetupContextForSelectedChannel(c, channel, requestModel)
+
+		if channelrouter.DefaultRouter != nil && channel.GetRPM() > 0 {
+			channelrouter.DefaultRouter.IncrementRPM(channel.Id)
+		}
+
+		if sessionKey != "" {
+			channelrouter.DefaultRouter.SetStickySession(sessionKey, channel.Id)
+		}
+
 		c.Next()
+
+		if val, exists := c.Get(ctxkey.ConcurrencyAcquired); exists && val.(bool) {
+			channelrouter.DefaultRouter.ReleaseConcurrency(channel.Id)
+		}
 	}
 }
 
-// selectChannelViaRouter 经 channelrouter 选路（移植自 one-api-pro）：
-// 粘性会话（可选）→ 冷却/并发/RPM 过滤 → 权重+优先级选择；
-// router 未初始化或无候选时回退上游原生的随机选择。
-func selectChannelViaRouter(c *gin.Context, group, requestModel string, userId int, ignoreFirstPriority bool) (*model.Channel, error) {
+func selectChannelViaRouter(c *gin.Context, group, modelName string, userId int, ignoreFirstPriority bool) (*model.Channel, error) {
 	if channelrouter.DefaultRouter == nil {
-		return model.CacheGetRandomSatisfiedChannel(group, requestModel, ignoreFirstPriority)
-	}
-	candidates := model.GetChannelCandidates(group, requestModel)
-	if len(candidates) == 0 {
-		return model.CacheGetRandomSatisfiedChannel(group, requestModel, ignoreFirstPriority)
+		return model.CacheGetRandomSatisfiedChannel(group, modelName, ignoreFirstPriority)
 	}
 
 	sessionKey := ""
-	if config.ChannelStickySessionEnabled && userId > 0 && requestModel != "" {
-		sessionKey = channelrouter.MakeSessionKey(userId, requestModel)
-		c.Set(ctxkey.SessionKey, sessionKey)
+	if config.ChannelStickySessionEnabled && userId > 0 && modelName != "" {
+		sessionKey = channelrouter.MakeSessionKey(userId, modelName)
+	}
+
+	candidates := model.GetChannelCandidates(group, modelName)
+	if len(candidates) == 0 {
+		return model.CacheGetRandomSatisfiedChannel(group, modelName, ignoreFirstPriority)
 	}
 
 	req := &channelrouter.RouteRequest{
 		Group:               group,
-		Model:               requestModel,
+		Model:               modelName,
 		UserId:              userId,
 		IgnoreFirstPriority: ignoreFirstPriority,
 		SessionKey:          sessionKey,
 	}
-	return channelrouter.DefaultRouter.Route(c.Request.Context(), req, candidates)
+
+	ch, err := channelrouter.DefaultRouter.Route(c.Request.Context(), req, candidates)
+	if err != nil {
+		return model.CacheGetRandomSatisfiedChannel(group, modelName, ignoreFirstPriority)
+	}
+	return ch, nil
 }
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) {
@@ -111,28 +143,34 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	c.Set(ctxkey.ModelMapping, channel.GetModelMapping())
 	c.Set(ctxkey.OriginalModel, modelName) // for retry
 	c.Request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", channel.Key))
-	c.Set(ctxkey.BaseURL, channel.GetBaseURL())
+	channelID := registry.IDByLegacyType(channel.Type)
+	c.Set(ctxkey.ChannelID, channelID)
+	baseURL := channel.GetBaseURL()
+	if baseURL == "" {
+		baseURL = registry.GetDefaultBaseURL(channelID)
+	}
+	c.Set(ctxkey.BaseURL, baseURL)
 	cfg, _ := channel.LoadConfig()
 	// this is for backward compatibility
 	if channel.Other != nil {
-		switch channel.Type {
-		case channeltype.Azure:
+		switch registry.IDByLegacyType(channel.Type) {
+		case "azure":
 			if cfg.APIVersion == "" {
 				cfg.APIVersion = *channel.Other
 			}
-		case channeltype.Xunfei:
+		case "xunfei":
 			if cfg.APIVersion == "" {
 				cfg.APIVersion = *channel.Other
 			}
-		case channeltype.Gemini:
+		case "gemini":
 			if cfg.APIVersion == "" {
 				cfg.APIVersion = *channel.Other
 			}
-		case channeltype.AIProxyLibrary:
+		case "aiproxylibrary":
 			if cfg.LibraryID == "" {
 				cfg.LibraryID = *channel.Other
 			}
-		case channeltype.Ali:
+		case "ali":
 			if cfg.Plugin == "" {
 				cfg.Plugin = *channel.Other
 			}

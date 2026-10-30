@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/relay/schema"
 )
 
 func ErrorWrapper(err error, code string, statusCode int) *model.ErrorWithStatusCode {
-	logger.Error(context.TODO(), fmt.Sprintf("[%s]%+v", code, err))
+	logger.Error(context.TODO(), fmt.Sprintf("[%s][status:%d] %+v", code, statusCode, err))
 
 	Error := model.Error{
 		Message: err.Error(),

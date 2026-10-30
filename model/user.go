@@ -8,12 +8,12 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/blacklist"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/random"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/blacklist"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/common/random"
 )
 
 const (
@@ -49,8 +49,35 @@ type User struct {
 	UsedQuota        int64  `json:"used_quota" gorm:"bigint;default:0;column:used_quota"` // used quota
 	RequestCount     int    `json:"request_count" gorm:"type:int;default:0;"`             // request number
 	Group            string `json:"group" gorm:"type:varchar(32);default:'default'"`
-	AffCode          string `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
-	InviterId        int    `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	AffCode          string                    `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
+	InviterId        int                       `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	Plans           []*UserSubscriptionBrief `json:"plans" gorm:"-"`
+	CreatedAt        int64                     `json:"created_at" gorm:"bigint;default:0"`
+	UpdatedAt        int64                     `json:"updated_at" gorm:"bigint;default:0"`
+}
+
+// BeforeCreate 自动填充 CreatedAt / UpdatedAt，避免新建用户的 created_at 永远为 0。
+// BeforeCreate auto-fills CreatedAt / UpdatedAt so newly inserted users have a non-zero timestamp.
+// 版本: v0.0.12
+// 日期: 2026-09-07
+func (user *User) BeforeCreate(tx *gorm.DB) error {
+	now := helper.GetTimestamp()
+	if user.CreatedAt == 0 {
+		user.CreatedAt = now
+	}
+	if user.UpdatedAt == 0 {
+		user.UpdatedAt = user.CreatedAt
+	}
+	return nil
+}
+
+// BeforeUpdate 自动刷新 UpdatedAt，覆盖所有 Updates(...) 路径。
+// BeforeUpdate refreshes UpdatedAt for every Updates(...) call site.
+// 版本: v0.0.12
+// 日期: 2026-09-07
+func (user *User) BeforeUpdate(tx *gorm.DB) error {
+	user.UpdatedAt = helper.GetTimestamp()
+	return nil
 }
 
 func GetMaxUserId() int {
@@ -179,6 +206,22 @@ func (user *User) Update(updatePassword bool) error {
 	}
 	err = DB.Model(user).Updates(user).Error
 	return err
+}
+
+// UpdateUserQuotaColumn 按列显式更新用户额度，允许把额度写成 0。
+//
+// 为什么单独一个函数：User.Update 使用结构体形式的 Updates(user)，GORM 会跳过零值字段，
+// 管理员把额度清零时接口虽返回成功、额度却不变。此处改用列形式写入，0 也能落库。
+//
+// UpdateUserQuotaColumn writes the user quota column explicitly so that 0 is persisted;
+// struct-based Updates would silently skip it.
+// 版本: v0.0.25
+// 日期: 2026-10-05
+func UpdateUserQuotaColumn(userId int, quota int64) error {
+	if userId == 0 {
+		return errors.New("id 为空！")
+	}
+	return DB.Model(&User{}).Where("id = ?", userId).Update("quota", quota).Error
 }
 
 func (user *User) Delete() error {
@@ -377,9 +420,20 @@ func IncreaseUserQuota(id int, quota int64) (err error) {
 	}
 	if config.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUserQuota, id, quota)
+		// Batch mode: actual DB write + cache refresh happen in batchUpdate().
 		return nil
 	}
-	return increaseUserQuota(id, quota)
+	if err = increaseUserQuota(id, quota); err != nil {
+		return err
+	}
+	// DB write succeeded — keep the Redis cache in sync with users.quota so the
+	// next request sees the new balance instead of a stale value. Use an
+	// independent context because the caller's context may have been canceled
+	// by the time we reach this point (e.g. on shutdown).
+	if cerr := CacheUpdateUserQuota(context.Background(), id); cerr != nil {
+		logger.SysError(fmt.Sprintf("IncreaseUserQuota: cache refresh failed for user %d: %s", id, cerr.Error()))
+	}
+	return nil
 }
 
 func increaseUserQuota(id int, quota int64) (err error) {
@@ -450,4 +504,34 @@ func updateUserRequestCount(id int, count int) {
 func GetUsernameById(id int) (username string) {
 	DB.Model(&User{}).Where("id = ?", id).Select("username").Find(&username)
 	return username
+}
+
+// UserBrief 是订单/订阅等列表场景下嵌入到每行的精简用户信息。
+// UserBrief is the minimal user projection embedded in list rows (orders, etc.).
+type UserBrief struct {
+	Id          int    `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+}
+
+// GetUsersBriefByIds 返回 id → UserBrief 映射；ids 为空时返回空 map。
+// 用于订单列表批量嵌入用户名,避免 N+1 查询。
+// GetUsersBriefByIds returns id → UserBrief mapping for embedding into
+// list rows (e.g. orders). Empty ids returns an empty map without DB hit.
+func GetUsersBriefByIds(ids []int) (map[int]*UserBrief, error) {
+	out := make(map[int]*UserBrief)
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var briefs []*UserBrief
+	if err := DB.Model(&User{}).
+		Select("id, username, display_name").
+		Where("id IN ?", ids).
+		Scan(&briefs).Error; err != nil {
+		return nil, err
+	}
+	for _, b := range briefs {
+		out[b.Id] = b
+	}
+	return out, nil
 }

@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/relay/schema"
 )
 
 func ResponseText2Usage(responseText string, modelName string, promptTokens int) *model.Usage {
@@ -16,17 +15,17 @@ func ResponseText2Usage(responseText string, modelName string, promptTokens int)
 	return usage
 }
 
-func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
-	if channelType == channeltype.OpenAICompatible {
+func GetFullRequestURL(baseURL string, requestURL string, channelID string) string {
+	if channelID == "openai_compatible" {
 		return fmt.Sprintf("%s%s", strings.TrimSuffix(baseURL, "/"), strings.TrimPrefix(requestURL, "/v1"))
 	}
 	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
 
 	if strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") {
-		switch channelType {
-		case channeltype.OpenAI:
+		switch channelID {
+		case "openai":
 			fullRequestURL = fmt.Sprintf("%s%s", baseURL, strings.TrimPrefix(requestURL, "/v1"))
-		case channeltype.Azure:
+		case "azure":
 			fullRequestURL = fmt.Sprintf("%s%s", baseURL, strings.TrimPrefix(requestURL, "/openai/deployments"))
 		}
 	}

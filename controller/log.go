@@ -1,13 +1,55 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/ctxkey"
+	"github.com/perryles/one-api-next/model"
 )
+
+func enrichLogs(logs []*model.Log) {
+	channelIds := make(map[int]bool)
+	planIds := make(map[int]bool)
+	for _, log := range logs {
+		if log.ChannelId > 0 {
+			channelIds[log.ChannelId] = true
+		}
+		if log.PlanId > 0 {
+			planIds[log.PlanId] = true
+		}
+	}
+
+	channelNames := make(map[int]string)
+	for id := range channelIds {
+		ch, err := model.GetChannelById(id, false)
+		if err == nil {
+			channelNames[id] = ch.Name
+		}
+	}
+
+	planNames := make(map[int]string)
+	for userPlanId := range planIds {
+		up, err := model.GetUserPlanById(userPlanId)
+		if err == nil && up != nil {
+			p, err := model.GetPlanById(up.PlanId)
+			if err == nil {
+				planNames[userPlanId] = p.Name
+			}
+		}
+	}
+
+	for _, log := range logs {
+		if name, ok := channelNames[log.ChannelId]; ok {
+			log.ChannelName = name
+		}
+		if name, ok := planNames[log.PlanId]; ok {
+			log.PlanName = name
+		}
+	}
+}
 
 func GetAllLogs(c *gin.Context) {
 	p, _ := strconv.Atoi(c.Query("p"))
@@ -29,10 +71,12 @@ func GetAllLogs(c *gin.Context) {
 		})
 		return
 	}
+	enrichLogs(logs)
+	// quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    toLogDTOs(logs),
 	})
 	return
 }
@@ -56,10 +100,12 @@ func GetUserLogs(c *gin.Context) {
 		})
 		return
 	}
+	enrichLogs(logs)
+	// quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    toLogDTOs(logs),
 	})
 	return
 }
@@ -74,10 +120,12 @@ func SearchAllLogs(c *gin.Context) {
 		})
 		return
 	}
+	enrichLogs(logs)
+	// quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    toLogDTOs(logs),
 	})
 	return
 }
@@ -93,10 +141,12 @@ func SearchUserLogs(c *gin.Context) {
 		})
 		return
 	}
+	enrichLogs(logs)
+	// quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    toLogDTOs(logs),
 	})
 	return
 }
@@ -110,14 +160,13 @@ func GetLogsStat(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
-	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, "")
+	normalQuota := model.SumUsedQuotaByBillingSource(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, 0)
+	subscriptionQuota := model.SumUsedQuotaByBillingSource(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, 1)
+	// quota/normal_quota/subscription_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data": gin.H{
-			"quota": quotaNum,
-			//"token": tokenNum,
-		},
+		"data":    toQuotaStatDTO(quotaNum, normalQuota, subscriptionQuota),
 	})
 	return
 }
@@ -131,14 +180,13 @@ func GetLogsSelfStat(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
-	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
+	normalQuota := model.SumUsedQuotaByBillingSource(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, 0)
+	subscriptionQuota := model.SumUsedQuotaByBillingSource(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, 1)
+	// quota/normal_quota/subscription_quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data": gin.H{
-			"quota": quotaNum,
-			//"token": tokenNum,
-		},
+		"data":    toQuotaStatDTO(quotaNum, normalQuota, subscriptionQuota),
 	})
 	return
 }

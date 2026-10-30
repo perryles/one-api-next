@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/model"
 )
 
 type StickySessionStore struct {

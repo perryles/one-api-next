@@ -1,0 +1,100 @@
+// dashboard.go 管理员仪表盘 HTTP handler
+// Admin dashboard HTTP handlers.
+// 版本: v0.0.16
+// 日期: 2026-09-11
+// 作者: opencode
+//
+// 路由由 router/api.go 在 /api/admin/dashboard 下以 AdminAuth 注册。
+
+package admin
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/perryles/one-api-next/model"
+)
+
+// GetOverview 处理 GET /api/admin/dashboard/overview。
+// 一次性返回 KPI + 7 日趋势，供前端首屏渲染。
+// GetOverview handles GET /api/admin/dashboard/overview.
+// 版本: v0.0.16
+// 日期: 2026-09-11
+func GetOverview(c *gin.Context) {
+	rawRange := c.Query("range")
+	overview, err := model.GetAdminDashboardOverview(rawRange)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	// quota 聚合在 API 边界统一换算为「元」（见 quota_dto.go）。
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    toAdminOverviewDTO(overview),
+	})
+}
+
+// GetTopUsers 处理 GET /api/admin/dashboard/top-users。
+// Query: range=today|7d|30d (default 7d), limit (1-200, default 20)。
+// GetTopUsers handles GET /api/admin/dashboard/top-users.
+// 版本: v0.0.16
+// 日期: 2026-09-11
+func GetTopUsers(c *gin.Context) {
+	rawRange := c.Query("range")
+	limit, _ := strconv.Atoi(c.Query("limit"))
+
+	rows, preset, err := model.GetAdminTopUsers(rawRange, limit)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	// quota / balance 在 API 边界统一换算为「元」（见 quota_dto.go）。
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"range": preset,
+			"items": toAdminTopUserDTOs(rows),
+		},
+	})
+}
+
+// GetCharts 处理 GET /api/admin/dashboard/charts。
+// 返回全站按 day × model 聚合的日志统计（[]LogStatistic），结构与 api/user/dashboard 一致。
+// 前端用同一份数据绘制：请求量 / 额度 / Token 三张折线图 + 模型分布 + 使用明细。
+// Query: range=today|7d|30d|all (default 7d)。
+// GetCharts handles GET /api/admin/dashboard/charts.
+// Returns whole-site day×model stats ([]LogStatistic), same shape as api/user/dashboard.
+// 版本: v0.0.17
+// 日期: 2026-09-11
+func GetCharts(c *gin.Context) {
+	rawRange := c.Query("range")
+	win := model.ParseAdminChartsRange(rawRange)
+
+	rows, err := model.SearchAdminLogsByDayAndModel(win.Start, win.End)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	if rows == nil {
+		rows = []*model.LogStatistic{}
+	}
+	// Quota 在 API 边界统一换算为「元」（见 quota_dto.go）。
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    toLogStatisticDTOs(rows),
+	})
+}

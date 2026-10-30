@@ -8,11 +8,11 @@ import (
 
 	"github.com/pkoukk/tiktoken-go"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/common/logger"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/image"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/model"
+	relaymodel "github.com/perryles/one-api-next/relay/schema"
 )
 
 // tokenEncoderMap won't grow after initialization
@@ -21,32 +21,50 @@ var defaultTokenEncoder *tiktoken.Tiktoken
 
 func InitTokenEncoders() {
 	logger.SysLog("initializing token encoders")
+	tiktoken.SetBpeLoader(newHTTPBpeLoader())
+
 	gpt35TokenEncoder, err := tiktoken.EncodingForModel("gpt-3.5-turbo")
 	if err != nil {
-		logger.FatalLog(fmt.Sprintf("failed to get gpt-3.5-turbo token encoder: %s, "+
-			"if you are using in offline environment, please set TIKTOKEN_CACHE_DIR to use exsited files, check this link for more information: https://stackoverflow.com/questions/76106366/how-to-use-tiktoken-in-offline-mode-computer ", err.Error()))
+		fallbackToApproximateTokenCount("gpt-3.5-turbo", err)
+		return
 	}
 	defaultTokenEncoder = gpt35TokenEncoder
 	gpt4oTokenEncoder, err := tiktoken.EncodingForModel("gpt-4o")
 	if err != nil {
-		logger.FatalLog(fmt.Sprintf("failed to get gpt-4o token encoder: %s", err.Error()))
+		fallbackToApproximateTokenCount("gpt-4o", err)
+		return
 	}
 	gpt4TokenEncoder, err := tiktoken.EncodingForModel("gpt-4")
 	if err != nil {
-		logger.FatalLog(fmt.Sprintf("failed to get gpt-4 token encoder: %s", err.Error()))
+		fallbackToApproximateTokenCount("gpt-4", err)
+		return
 	}
-	for model := range billingratio.ModelRatio {
-		if strings.HasPrefix(model, "gpt-3.5") {
-			tokenEncoderMap[model] = gpt35TokenEncoder
-		} else if strings.HasPrefix(model, "gpt-4o") {
-			tokenEncoderMap[model] = gpt4oTokenEncoder
-		} else if strings.HasPrefix(model, "gpt-4") {
-			tokenEncoderMap[model] = gpt4TokenEncoder
+	prices, dbErr := model.GetAllModelPrices()
+	if dbErr != nil {
+		logger.SysError("failed to get model prices for token encoder init: " + dbErr.Error())
+	}
+	for _, mp := range prices {
+		modelName := mp.ModelName
+		if strings.HasPrefix(modelName, "gpt-3.5") {
+			tokenEncoderMap[modelName] = gpt35TokenEncoder
+		} else if strings.HasPrefix(modelName, "gpt-4o") {
+			tokenEncoderMap[modelName] = gpt4oTokenEncoder
+		} else if strings.HasPrefix(modelName, "gpt-4") {
+			tokenEncoderMap[modelName] = gpt4TokenEncoder
 		} else {
-			tokenEncoderMap[model] = nil
+			tokenEncoderMap[modelName] = nil
 		}
 	}
 	logger.SysLog("token encoders initialized")
+}
+
+// fallbackToApproximateTokenCount 在 token 编码器初始化失败时降级为近似计数，
+// 避免离线/网络受限环境下因无法下载编码文件导致服务启动失败。
+func fallbackToApproximateTokenCount(modelName string, err error) {
+	logger.SysError(fmt.Sprintf("failed to get %s token encoder: %s, falling back to approximate token counting. "+
+		"if you are in an offline environment, set TIKTOKEN_CACHE_DIR to a directory with pre-downloaded encodings. "+
+		"see: https://stackoverflow.com/questions/76106366/how-to-use-tiktoken-in-offline-mode-computer", modelName, err.Error()))
+	config.ApproximateTokenEnabled = true
 }
 
 func getTokenEncoder(model string) *tiktoken.Tiktoken {
@@ -73,7 +91,7 @@ func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
 	return len(tokenEncoder.Encode(text, nil, nil))
 }
 
-func CountTokenMessages(messages []model.Message, model string) int {
+func CountTokenMessages(messages []relaymodel.Message, model string) int {
 	tokenEncoder := getTokenEncoder(model)
 	// Reference:
 	// https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb

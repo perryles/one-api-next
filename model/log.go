@@ -6,10 +6,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/helper"
+	"github.com/perryles/one-api-next/common/logger"
 )
 
 type Log struct {
@@ -24,11 +24,18 @@ type Log struct {
 	Quota             int    `json:"quota" gorm:"default:0"`
 	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
 	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
+	CachedTokens      int    `json:"cached_tokens" gorm:"default:0"`
 	ChannelId         int    `json:"channel" gorm:"index"`
 	RequestId         string `json:"request_id" gorm:"default:''"`
-	ElapsedTime       int64  `json:"elapsed_time" gorm:"default:0"` // unit is ms
+	ElapsedTime       int64  `json:"elapsed_time" gorm:"default:0"`
 	IsStream          bool   `json:"is_stream" gorm:"default:false"`
 	SystemPromptReset bool   `json:"system_prompt_reset" gorm:"default:false"`
+	BillingSource     int    `json:"billing_source" gorm:"default:0"`
+	PlanId            int    `json:"plan_id" gorm:"default:0"`
+	SessionKey        string `json:"session_key" gorm:"type:varchar(128);default:'';index"`
+	ChannelName       string `json:"channel_name" gorm:"-"`
+	PlanName          string `json:"plan_name" gorm:"-"`
+	UpdatedAt         int64  `json:"updated_at" gorm:"bigint;default:0"`
 }
 
 const (
@@ -155,7 +162,7 @@ func SearchUserLogs(userId int, keyword string) (logs []*Log, err error) {
 	return logs, err
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int) (quota int64) {
+func buildLogQuotaQuery(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int) *gorm.DB {
 	ifnull := "ifnull"
 	if common.UsingPostgreSQL {
 		ifnull = "COALESCE"
@@ -179,7 +186,20 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	if channel != 0 {
 		tx = tx.Where("channel_id = ?", channel)
 	}
-	tx.Where("type = ?", LogTypeConsume).Scan(&quota)
+	tx = tx.Where("type = ?", LogTypeConsume)
+	return tx
+}
+
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int) (quota int64) {
+	tx := buildLogQuotaQuery(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
+	tx.Scan(&quota)
+	return quota
+}
+
+func SumUsedQuotaByBillingSource(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, billingSource int) (quota int64) {
+	tx := buildLogQuotaQuery(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
+	tx = tx.Where("billing_source = ?", billingSource)
+	tx.Scan(&quota)
 	return quota
 }
 

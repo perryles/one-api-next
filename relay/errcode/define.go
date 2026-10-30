@@ -21,10 +21,10 @@ var StatusCodeMappings = map[int]ErrorCodeMapping{
 
 const (
 	ActionPassthrough = "passthrough"
-	ActionRetry       = "retry"
-	ActionDisable     = "disable"
-	ActionCooldown    = "cooldown"
-	ActionReturn      = "return"
+	ActionRetry      = "retry"
+	ActionDisable    = "disable"
+	ActionCooldown   = "cooldown"
+	ActionReturn     = "return"
 
 	CategoryPassthrough = "passthrough"
 	CategoryDisable     = "disable"

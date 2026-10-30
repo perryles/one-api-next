@@ -14,8 +14,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/helper"
 )
 
 type loggerLevel string
@@ -35,9 +35,9 @@ func SetupLogger() {
 		if LogDir != "" {
 			var logPath string
 			if config.OnlyOneLogFile {
-				logPath = filepath.Join(LogDir, "oneapi.log")
+				logPath = filepath.Join(LogDir, "one-api-pro.log")
 			} else {
-				logPath = filepath.Join(LogDir, fmt.Sprintf("oneapi-%s.log", time.Now().Format("20060102")))
+				logPath = filepath.Join(LogDir, fmt.Sprintf("one-api-pro-%s.log", time.Now().Format("20060102")))
 			}
 			fd, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
@@ -152,7 +152,7 @@ func getLineInfo() (string, string) {
 		file = "unknown"
 		line = 0
 	}
-	parts := strings.Split(file, "one-api/")
+	parts := strings.Split(file, "one-api-pro/")
 	if len(parts) > 1 {
 		file = parts[1]
 	}

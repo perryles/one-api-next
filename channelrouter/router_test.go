@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/songquanpeng/one-api/model"
+	"github.com/perryles/one-api-next/model"
 )
 
 func makeChannel(id, status, priority int, maxConc int) *model.Channel {
@@ -221,8 +221,8 @@ func TestRouteExcludesFallbackChannels(t *testing.T) {
 	router := NewChannelRouter()
 	candidates := []*model.Channel{
 		makeFallbackChannel(10, model.ChannelStatusEnabled, 100, false, 0), // highest priority, normal
-		makeFallbackChannel(20, model.ChannelStatusEnabled, 100, true, 50), // highest priority, fallback
-		makeFallbackChannel(30, model.ChannelStatusEnabled, 50, false, 0),  // lower priority, normal
+		makeFallbackChannel(20, model.ChannelStatusEnabled, 100, true, 50),  // highest priority, fallback
+		makeFallbackChannel(30, model.ChannelStatusEnabled, 50, false, 0),   // lower priority, normal
 	}
 	for i := 0; i < 50; i++ {
 		ch, err := router.Route(context.Background(), &RouteRequest{

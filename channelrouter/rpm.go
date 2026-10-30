@@ -3,6 +3,9 @@ package channelrouter
 import (
 	"sync"
 	"time"
+
+	"github.com/perryles/one-api-next/cluster"
+	"github.com/perryles/one-api-next/model"
 )
 
 type RPMTracker struct {
@@ -23,6 +26,19 @@ func NewRPMTracker() *RPMTracker {
 }
 
 func (t *RPMTracker) Increment(channelId int) {
+	if cluster.Enabled {
+		currentMinute := time.Now().Unix() / 60
+		now := time.Now().Unix()
+		model.DB.Exec(`
+			INSERT INTO channel_counters (channel_id, node_id, concurrency, rpm_count, rpm_minute, updated_at)
+			VALUES (?, ?, 0, 1, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				rpm_count = CASE WHEN rpm_minute = ? THEN rpm_count + 1 ELSE 1 END,
+				rpm_minute = ?,
+				updated_at = ?
+		`, channelId, cluster.NodeID, currentMinute, now, currentMinute, currentMinute, now)
+		return
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -44,6 +60,14 @@ func (t *RPMTracker) Increment(channelId int) {
 }
 
 func (t *RPMTracker) CurrentRPM(channelId int) int {
+	if cluster.Enabled {
+		currentMinute := time.Now().Unix() / 60
+		var total int64
+		model.DB.Model(&model.ChannelCounter{}).
+			Where("channel_id = ? AND rpm_minute = ?", channelId, currentMinute).
+			Select("SUM(rpm_count)").Scan(&total)
+		return int(total)
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

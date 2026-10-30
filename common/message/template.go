@@ -3,7 +3,7 @@ package message
 import (
 	"fmt"
 
-	"github.com/songquanpeng/one-api/common/config"
+	"github.com/perryles/one-api-next/common/config"
 )
 
 // EmailTemplate 生成美观的 HTML 邮件内容

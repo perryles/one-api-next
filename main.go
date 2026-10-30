@@ -9,28 +9,28 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-	_ "github.com/joho/godotenv/autoload"
 
-	"github.com/songquanpeng/one-api/channelrouter"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/i18n"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/middleware"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/router"
+	"github.com/perryles/one-api-next/common"
+	"github.com/perryles/one-api-next/common/client"
+	"github.com/perryles/one-api-next/common/config"
+	"github.com/perryles/one-api-next/common/i18n"
+	"github.com/perryles/one-api-next/common/logger"
+	"github.com/perryles/one-api-next/controller"
+	"github.com/perryles/one-api-next/middleware"
+	"github.com/perryles/one-api-next/model"
+	"github.com/perryles/one-api-next/channelrouter"
+	"github.com/perryles/one-api-next/cluster"
+	"github.com/perryles/one-api-next/relay/adaptor/openai"
+	"github.com/perryles/one-api-next/router"
 )
 
-//go:embed web/build/*
+//go:embed all:web/build
 var buildFS embed.FS
 
 func main() {
 	common.Init()
 	logger.SetupLogger()
-	logger.SysLogf("One API %s started", common.Version)
+	logger.SysLogf("One Api Pro %s started", common.Version)
 
 	if os.Getenv("GIN_MODE") != gin.DebugMode {
 		gin.SetMode(gin.ReleaseMode)
@@ -64,6 +64,9 @@ func main() {
 	// Initialize options
 	model.InitOptionMap()
 	logger.SysLog(fmt.Sprintf("using theme %s", config.Theme))
+	if err := common.ValidateEmbeddedTheme(buildFS, "web/build", config.Theme); err != nil {
+		logger.SysError(err.Error())
+	}
 	if common.RedisEnabled {
 		// for compatibility with old versions
 		config.MemoryCacheEnabled = true
@@ -94,9 +97,10 @@ func main() {
 	}
 	openai.InitTokenEncoders()
 	client.Init()
-
-	// one-api-pro 移植：渠道路由器（粘性会话/冷却/并发/RPM，默认关闭）
 	channelrouter.InitRouter()
+
+	// 初始化集群模块
+	cluster.Init(model.DB)
 
 	// Initialize i18n
 	if err := i18n.Init(); err != nil {
